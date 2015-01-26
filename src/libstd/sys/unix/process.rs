@@ -64,7 +64,6 @@ impl Process {
               K: BytesContainer + Eq + Hash<Hasher>, V: BytesContainer
     {
         use libc::funcs::posix88::unistd::{fork, dup2, close, chdir, execvp};
-        use libc::funcs::bsd44::getdtablesize;
 
         mod rustrt {
             extern {
@@ -224,7 +223,8 @@ impl Process {
                 if !setup(err_fd, libc::STDERR_FILENO) { fail(&mut output) }
 
                 // close all other fds
-                for fd in range(3, getdtablesize()).rev() {
+                let open_max = libc::sysconf(libc::consts::os::sysconf::_SC_OPEN_MAX);
+                for fd in range(3, open_max as c_int).rev() {
                     if fd != output.fd() {
                         let _ = close(fd as c_int);
                     }
