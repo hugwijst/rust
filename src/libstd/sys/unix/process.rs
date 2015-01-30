@@ -224,7 +224,7 @@ impl Process {
 
                 // close all other fds
                 let open_max = libc::sysconf(libc::consts::os::sysconf::_SC_OPEN_MAX);
-                for fd in range(3, open_max as c_int).rev() {
+                for fd in (3..open_max).rev() {
                     if fd != output.fd() {
                         let _ = close(fd as c_int);
                     }

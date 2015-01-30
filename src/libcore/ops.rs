@@ -35,7 +35,7 @@
 //! ```rust
 //! use std::ops::{Add, Sub};
 //!
-//! #[derive(Show)]
+//! #[derive(Debug)]
 //! struct Point {
 //!     x: int,
 //!     y: int
@@ -947,13 +947,30 @@ pub trait IndexMut<Index: ?Sized> {
 }
 
 /// An unbounded range.
+#[cfg(stage0)]
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[lang="full_range"]
 #[unstable(feature = "core", reason  = "may be renamed to RangeFull")]
 pub struct FullRange;
 
+/// An unbounded range.
+#[cfg(not(stage0))]
+#[derive(Copy, Clone, PartialEq, Eq)]
+#[lang="range_full"]
+#[stable(feature = "rust1", since = "1.0.0")]
+pub struct RangeFull;
+
+#[cfg(stage0)]
 #[stable(feature = "rust1", since = "1.0.0")]
 impl fmt::Debug for FullRange {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt("..", fmt)
+    }
+}
+
+#[cfg(not(stage0))]
+#[stable(feature = "rust1", since = "1.0.0")]
+impl fmt::Debug for RangeFull {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt("..", fmt)
     }
@@ -1166,6 +1183,7 @@ impl<F,A,R> FnOnce<A,R> for F
 #[unstable(feature = "core",
            reason = "uncertain about variadic generics, input versus associated types")]
 #[cfg(not(stage0))]
+#[rustc_paren_sugar]
 pub trait Fn<Args> {
     type Output;
 
@@ -1178,6 +1196,7 @@ pub trait Fn<Args> {
 #[unstable(feature = "core",
            reason = "uncertain about variadic generics, input versus associated types")]
 #[cfg(not(stage0))]
+#[rustc_paren_sugar]
 pub trait FnMut<Args> {
     type Output;
 
@@ -1190,6 +1209,7 @@ pub trait FnMut<Args> {
 #[unstable(feature = "core",
            reason = "uncertain about variadic generics, input versus associated types")]
 #[cfg(not(stage0))]
+#[rustc_paren_sugar]
 pub trait FnOnce<Args> {
     type Output;
 
