@@ -431,9 +431,11 @@ fn run_debuginfo_gdb_test(config: &Config, props: &TestProps, testfile: &Path) {
                          Some("".to_string()))
                 .expect(format!("failed to exec `{:?}`", config.adb_path).as_slice());
 
-            let adb_arg = format!("export LD_LIBRARY_PATH={}; \
+            let adb_arg = format!("export LD_LIBRARY_PATH={}:{}/{}; \
                                    gdbserver{} :5039 {}/{}",
                                   config.adb_test_dir.clone(),
+                                  config.adb_test_dir.clone(),
+                                  config.target.clone(),
                                   if config.target.as_slice() == "aarch64-linux-android"
                                   {"64"} else {""},
                                   config.adb_test_dir.clone(),
@@ -1518,6 +1520,7 @@ fn _arm_exec_compiled_test(config: &Config,
     }
     runargs.push(format!("{}/adb_run_wrapper.sh", config.adb_test_dir));
     runargs.push(format!("{}", config.adb_test_dir));
+    runargs.push(format!("{}", config.target));
     runargs.push(format!("{}", prog_short));
 
     for tv in args.args.iter() {
@@ -1612,7 +1615,7 @@ fn _arm_push_aux_shared_library(config: &Config, testfile: &Path) {
                                             file.as_str()
                                                 .unwrap()
                                                 .to_string(),
-                                            config.adb_test_dir.to_string()
+                                            config.adb_test_dir.to_string(),
                                            ],
                                            vec!(("".to_string(),
                                                  "".to_string())),
