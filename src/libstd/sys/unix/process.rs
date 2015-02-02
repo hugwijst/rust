@@ -82,6 +82,14 @@ impl Process {
             extern { static mut environ: *const c_void; }
             environ = envp;
         }
+        #[cfg(all(target_os = "android", target_arch = "aarch64"))]
+        unsafe fn getdtablesize() -> c_int {
+            libc::sysconf(libc::consts::os::sysconf::_SC_OPEN_MAX) as c_int
+        }
+        #[cfg(not(all(target_os = "android", target_arch = "aarch64")))]
+        unsafe fn getdtablesize() -> c_int {
+            libc::funcs::bsd44::getdtablesize()
+        }
 
         unsafe fn set_cloexec(fd: c_int) {
             let ret = c::ioctl(fd, c::FIOCLEX);
@@ -223,8 +231,7 @@ impl Process {
                 if !setup(err_fd, libc::STDERR_FILENO) { fail(&mut output) }
 
                 // close all other fds
-                let open_max = libc::sysconf(libc::consts::os::sysconf::_SC_OPEN_MAX);
-                for fd in (3..open_max).rev() {
+                for fd in (3..getdtablesize()).rev() {
                     if fd != output.fd() {
                         let _ = close(fd as c_int);
                     }

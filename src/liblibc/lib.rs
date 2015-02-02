@@ -4827,6 +4827,7 @@ pub mod funcs {
                                    mibp: *mut c_int,
                                    sizep: *mut size_t)
                                    -> c_int;
+            pub fn getdtablesize() -> c_int;
             pub fn madvise(addr: *mut c_void, len: size_t, advice: c_int)
                            -> c_int;
             pub fn mincore(addr: *mut c_void, len: size_t, vec: *mut c_uchar)
@@ -4841,6 +4842,8 @@ pub mod funcs {
         use types::os::arch::c95::{c_uchar, c_int, size_t};
 
         extern {
+            #[cfg(not(all(target_os = "android", target_arch = "aarch64")))]
+            pub fn getdtablesize() -> c_int;
             pub fn ioctl(d: c_int, request: c_int, ...) -> c_int;
             pub fn madvise(addr: *mut c_void, len: size_t, advice: c_int)
                            -> c_int;
