@@ -135,7 +135,7 @@
 
 fn main() {
 
-    let mut x = 0i;
+    let mut x = 0;
 
     while x < 2 {
         zzz(); // #break
@@ -155,7 +155,7 @@ fn main() {
             zzz(); // #break
             sentinel();
 
-            let x = -987i;
+            let x = -987;
 
             zzz(); // #break
             sentinel();

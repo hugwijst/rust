@@ -47,10 +47,10 @@ trait vec_utils<T> {
 
 impl<T> vec_utils<T> for Vec<T> {
     fn length_(&self) -> uint { self.len() }
-    fn iter_<F>(&self, mut f: F) where F: FnMut(&T) { for x in self.iter() { f(x); } }
+    fn iter_<F>(&self, mut f: F) where F: FnMut(&T) { for x in self { f(x); } }
     fn map_<U, F>(&self, mut f: F) -> Vec<U> where F: FnMut(&T) -> U {
         let mut r = Vec::new();
-        for elt in self.iter() {
+        for elt in self {
             r.push(f(elt));
         }
         r
@@ -61,10 +61,10 @@ pub fn main() {
     assert_eq!(10u.plus(), 30);
     assert_eq!(("hi".to_string()).plus(), 200);
 
-    assert_eq!((vec!(1i)).length_().str(), "1".to_string());
-    let vect = vec!(3i, 4).map_(|a| *a + 4);
+    assert_eq!((vec!(1)).length_().str(), "1".to_string());
+    let vect = vec!(3, 4).map_(|a| *a + 4);
     assert_eq!(vect[0], 7);
-    let vect = (vec!(3i, 4)).map_::<uint, _>(|a| *a as uint + 4u);
+    let vect = (vec!(3, 4)).map_::<uint, _>(|a| *a as uint + 4u);
     assert_eq!(vect[0], 7u);
     let mut x = 0u;
     10u.multi(|_n| x += 2u );

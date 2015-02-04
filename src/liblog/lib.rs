@@ -20,7 +20,7 @@
 //!     error!("this is printed by default");
 //!
 //!     if log_enabled!(log::INFO) {
-//!         let x = 3i * 4i; // expensive computation
+//!         let x = 3 * 4; // expensive computation
 //!         info!("the answer was: {:?}", x);
 //!     }
 //! }
@@ -158,7 +158,6 @@
 #![crate_name = "log"]
 #![unstable(feature = "rustc_private",
             reason = "use the crates.io `log` library instead")]
-#![feature(staged_api)]
 #![staged_api]
 #![crate_type = "rlib"]
 #![crate_type = "dylib"]
@@ -166,25 +165,23 @@
        html_favicon_url = "http://www.rust-lang.org/favicon.ico",
        html_root_url = "http://doc.rust-lang.org/nightly/",
        html_playground_url = "http://play.rust-lang.org/")]
+#![deny(missing_docs)]
 
-#![allow(unknown_features)]
+#![feature(staged_api)]
 #![feature(slicing_syntax)]
 #![feature(box_syntax)]
-#![allow(unknown_features)] #![feature(int_uint)]
-#![deny(missing_docs)]
-#![feature(collections)]
+#![feature(int_uint)]
 #![feature(core)]
 #![feature(io)]
-#![feature(os)]
-#![feature(rustc_private)]
 #![feature(std_misc)]
+#![feature(env)]
 
 use std::cell::RefCell;
 use std::fmt;
 use std::old_io::LineBufferedWriter;
 use std::old_io;
 use std::mem;
-use std::os;
+use std::env;
 use std::ptr;
 use std::rt;
 use std::slice;
@@ -400,9 +397,9 @@ fn enabled(level: u32,
 /// This is not threadsafe at all, so initialization is performed through a
 /// `Once` primitive (and this function is called from that primitive).
 fn init() {
-    let (mut directives, filter) = match os::getenv("RUST_LOG") {
-        Some(spec) => directive::parse_logging_spec(&spec[]),
-        None => (Vec::new(), None),
+    let (mut directives, filter) = match env::var_string("RUST_LOG") {
+        Ok(spec) => directive::parse_logging_spec(&spec[]),
+        Err(..) => (Vec::new(), None),
     };
 
     // Sort the provided directives by length of their name, this allows a

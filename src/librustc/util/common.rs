@@ -96,7 +96,7 @@ impl<'v, P> Visitor<'v> for LoopQueryVisitor<P> where P: FnMut(&ast::Expr_) -> b
         match e.node {
           // Skip inner loops, since a break in the inner loop isn't a
           // break inside the outer loop
-          ast::ExprLoop(..) | ast::ExprWhile(..) | ast::ExprForLoop(..) => {}
+          ast::ExprLoop(..) | ast::ExprWhile(..) => {}
           _ => visit::walk_expr(self, e)
         }
     }
@@ -163,7 +163,7 @@ pub fn can_reach<T, S>(edges_map: &HashMap<T, Vec<T>, S>, source: T,
     while i < queue.len() {
         match edges_map.get(&queue[i]) {
             Some(edges) => {
-                for target in edges.iter() {
+                for target in edges {
                     if *target == destination {
                         return true;
                     }

@@ -515,7 +515,7 @@ impl<'a, 'tcx> FunctionContext<'a, 'tcx> {
                        -> Block<'a, 'tcx> {
         let out = self.new_id_block("join", id);
         let mut reachable = false;
-        for bcx in in_cxs.iter() {
+        for bcx in in_cxs {
             if !bcx.unreachable.get() {
                 build::Br(*bcx, out.llbb, DebugLoc::None);
                 reachable = true;
@@ -693,7 +693,10 @@ impl<'blk, 'tcx> ty::ClosureTyper<'tcx> for BlockS<'blk, 'tcx> {
         &self.fcx.param_env
     }
 
-    fn closure_kind(&self, def_id: ast::DefId) -> ty::ClosureKind {
+    fn closure_kind(&self,
+                    def_id: ast::DefId)
+                    -> Option<ty::ClosureKind>
+    {
         let typer = NormalizingClosureTyper::new(self.tcx());
         typer.closure_kind(def_id)
     }
@@ -773,10 +776,6 @@ pub fn C_bool(ccx: &CrateContext, val: bool) -> ValueRef {
 
 pub fn C_i32(ccx: &CrateContext, i: i32) -> ValueRef {
     C_integral(Type::i32(ccx), i as u64, true)
-}
-
-pub fn C_i64(ccx: &CrateContext, i: i64) -> ValueRef {
-    C_integral(Type::i64(ccx), i as u64, true)
 }
 
 pub fn C_u64(ccx: &CrateContext, i: u64) -> ValueRef {
@@ -1065,8 +1064,11 @@ impl<'a,'tcx> ty::ClosureTyper<'tcx> for NormalizingClosureTyper<'a,'tcx> {
         &self.param_env
     }
 
-    fn closure_kind(&self, def_id: ast::DefId) -> ty::ClosureKind {
-        self.param_env.tcx.closure_kind(def_id)
+    fn closure_kind(&self,
+                    def_id: ast::DefId)
+                    -> Option<ty::ClosureKind>
+    {
+        self.param_env.closure_kind(def_id)
     }
 
     fn closure_type(&self,

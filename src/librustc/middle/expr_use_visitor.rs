@@ -260,12 +260,10 @@ impl OverloadedCallType {
     fn from_closure(tcx: &ty::ctxt, closure_did: ast::DefId)
                     -> OverloadedCallType {
         let trait_did =
-            tcx.closures
+            tcx.closure_kinds
                .borrow()
                .get(&closure_did)
-               .expect("OverloadedCallType::from_closure: didn't \
-                        find closure id")
-               .kind
+               .expect("OverloadedCallType::from_closure: didn't find closure id")
                .trait_did(tcx);
         OverloadedCallType::from_trait_id(tcx, trait_did)
     }
@@ -344,7 +342,7 @@ impl<'d,'t,'tcx,TYPER:mc::Typer<'tcx>> ExprUseVisitor<'d,'t,'tcx,TYPER> {
     fn walk_arg_patterns(&mut self,
                          decl: &ast::FnDecl,
                          body: &ast::Block) {
-        for arg in decl.inputs.iter() {
+        for arg in &decl.inputs {
             let arg_ty = return_if_err!(self.typer.node_ty(arg.pat.id));
 
             let fn_body_scope = region::CodeExtent::from_node_id(body.id);
@@ -374,7 +372,7 @@ impl<'d,'t,'tcx,TYPER:mc::Typer<'tcx>> ExprUseVisitor<'d,'t,'tcx,TYPER> {
     }
 
     fn consume_exprs(&mut self, exprs: &Vec<P<ast::Expr>>) {
-        for expr in exprs.iter() {
+        for expr in exprs {
             self.consume_expr(&**expr);
         }
     }
@@ -478,7 +476,7 @@ impl<'d,'t,'tcx,TYPER:mc::Typer<'tcx>> ExprUseVisitor<'d,'t,'tcx,TYPER> {
             ast::ExprIf(ref cond_expr, ref then_blk, ref opt_else_expr) => {
                 self.consume_expr(&**cond_expr);
                 self.walk_block(&**then_blk);
-                for else_expr in opt_else_expr.iter() {
+                if let Some(ref else_expr) = *opt_else_expr {
                     self.consume_expr(&**else_expr);
                 }
             }
@@ -492,7 +490,7 @@ impl<'d,'t,'tcx,TYPER:mc::Typer<'tcx>> ExprUseVisitor<'d,'t,'tcx,TYPER> {
                 self.borrow_expr(&**discr, ty::ReEmpty, ty::ImmBorrow, MatchDiscriminant);
 
                 // treatment of the discriminant is handled while walking the arms.
-                for arm in arms.iter() {
+                for arm in arms {
                     let mode = self.arm_move_mode(discr_cmt.clone(), arm);
                     let mode = mode.match_mode();
                     self.walk_arm(discr_cmt.clone(), arm, mode);
@@ -513,11 +511,11 @@ impl<'d,'t,'tcx,TYPER:mc::Typer<'tcx>> ExprUseVisitor<'d,'t,'tcx,TYPER> {
             }
 
             ast::ExprInlineAsm(ref ia) => {
-                for &(_, ref input) in ia.inputs.iter() {
+                for &(_, ref input) in &ia.inputs {
                     self.consume_expr(&**input);
                 }
 
-                for &(_, ref output, is_rw) in ia.outputs.iter() {
+                for &(_, ref output, is_rw) in &ia.outputs {
                     self.mutate_expr(expr, &**output,
                                            if is_rw { WriteAndRead } else { JustWrite });
                 }
@@ -540,22 +538,8 @@ impl<'d,'t,'tcx,TYPER:mc::Typer<'tcx>> ExprUseVisitor<'d,'t,'tcx,TYPER> {
                 self.tcx().sess.span_bug(expr.span, "non-desugared ExprWhileLet");
             }
 
-            ast::ExprForLoop(ref pat, ref head, ref blk, _) => {
-                // The pattern lives as long as the block.
-                debug!("walk_expr for loop case: blk id={}", blk.id);
-                self.consume_expr(&**head);
-
-                // Fetch the type of the value that the iteration yields to
-                // produce the pattern's categorized mutable type.
-                let pattern_type = return_if_err!(self.typer.node_ty(pat.id));
-                let blk_scope = region::CodeExtent::from_node_id(blk.id);
-                let pat_cmt = self.mc.cat_rvalue(pat.id,
-                                                 pat.span,
-                                                 ty::ReScope(blk_scope),
-                                                 pattern_type);
-                self.walk_irrefutable_pat(pat_cmt, &**pat);
-
-                self.walk_block(&**blk);
+            ast::ExprForLoop(..) => {
+                self.tcx().sess.span_bug(expr.span, "non-desugared ExprForLoop");
             }
 
             ast::ExprUnary(op, ref lhs) => {
@@ -588,7 +572,7 @@ impl<'d,'t,'tcx,TYPER:mc::Typer<'tcx>> ExprUseVisitor<'d,'t,'tcx,TYPER> {
             }
 
             ast::ExprRet(ref opt_expr) => {
-                for expr in opt_expr.iter() {
+                if let Some(ref expr) = *opt_expr {
                     self.consume_expr(&**expr);
                 }
             }
@@ -731,11 +715,11 @@ impl<'d,'t,'tcx,TYPER:mc::Typer<'tcx>> ExprUseVisitor<'d,'t,'tcx,TYPER> {
     fn walk_block(&mut self, blk: &ast::Block) {
         debug!("walk_block(blk.id={})", blk.id);
 
-        for stmt in blk.stmts.iter() {
+        for stmt in &blk.stmts {
             self.walk_stmt(&**stmt);
         }
 
-        for tail_expr in blk.expr.iter() {
+        if let Some(ref tail_expr) = blk.expr {
             self.consume_expr(&**tail_expr);
         }
     }
@@ -745,7 +729,7 @@ impl<'d,'t,'tcx,TYPER:mc::Typer<'tcx>> ExprUseVisitor<'d,'t,'tcx,TYPER> {
                         fields: &Vec<ast::Field>,
                         opt_with: &Option<P<ast::Expr>>) {
         // Consume the expressions supplying values for each field.
-        for field in fields.iter() {
+        for field in fields {
             self.consume_expr(&*field.expr);
         }
 
@@ -778,7 +762,7 @@ impl<'d,'t,'tcx,TYPER:mc::Typer<'tcx>> ExprUseVisitor<'d,'t,'tcx,TYPER> {
         };
 
         // Consume those fields of the with expression that are needed.
-        for with_field in with_fields.iter() {
+        for with_field in &with_fields {
             if !contains_field_named(with_field, fields) {
                 let cmt_field = self.mc.cat_field(&*with_expr,
                                                   with_cmt.clone(),
@@ -924,7 +908,7 @@ impl<'d,'t,'tcx,TYPER:mc::Typer<'tcx>> ExprUseVisitor<'d,'t,'tcx,TYPER> {
         match pass_args {
             PassArgs::ByValue => {
                 self.consume_expr(receiver);
-                for &arg in rhs.iter() {
+                for &arg in &rhs {
                     self.consume_expr(arg);
                 }
 
@@ -942,7 +926,7 @@ impl<'d,'t,'tcx,TYPER:mc::Typer<'tcx>> ExprUseVisitor<'d,'t,'tcx,TYPER> {
         let r = ty::ReScope(region::CodeExtent::from_node_id(expr.id));
         let bk = ty::ImmBorrow;
 
-        for &arg in rhs.iter() {
+        for &arg in &rhs {
             self.borrow_expr(arg, r, bk, OverloadedOperator);
         }
         return true;
@@ -950,18 +934,18 @@ impl<'d,'t,'tcx,TYPER:mc::Typer<'tcx>> ExprUseVisitor<'d,'t,'tcx,TYPER> {
 
     fn arm_move_mode(&mut self, discr_cmt: mc::cmt<'tcx>, arm: &ast::Arm) -> TrackMatchMode<Span> {
         let mut mode = Unknown;
-        for pat in arm.pats.iter() {
+        for pat in &arm.pats {
             self.determine_pat_move_mode(discr_cmt.clone(), &**pat, &mut mode);
         }
         mode
     }
 
     fn walk_arm(&mut self, discr_cmt: mc::cmt<'tcx>, arm: &ast::Arm, mode: MatchMode) {
-        for pat in arm.pats.iter() {
+        for pat in &arm.pats {
             self.walk_pat(discr_cmt.clone(), &**pat, mode);
         }
 
-        for guard in arm.guard.iter() {
+        if let Some(ref guard) = arm.guard {
             self.consume_expr(&**guard);
         }
 
@@ -1211,7 +1195,7 @@ impl<'d,'t,'tcx,TYPER:mc::Typer<'tcx>> ExprUseVisitor<'d,'t,'tcx,TYPER> {
         debug!("walk_captures({})", closure_expr.repr(self.tcx()));
 
         ty::with_freevars(self.tcx(), closure_expr.id, |freevars| {
-            for freevar in freevars.iter() {
+            for freevar in freevars {
                 let id_var = freevar.def.def_id().node;
                 let upvar_id = ty::UpvarId { var_id: id_var,
                                              closure_expr_id: closure_expr.id };

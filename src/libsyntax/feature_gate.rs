@@ -109,6 +109,9 @@ static KNOWN_FEATURES: &'static [(&'static str, &'static str, Status)] = &[
     // int and uint are now deprecated
     ("int_uint", "1.0.0", Active),
 
+    // macro reexport needs more discusion and stabilization
+    ("macro_reexport", "1.0.0", Active),
+
     // These are used to test this portion of the compiler, they don't actually
     // mean anything
     ("test_accepted_feature", "1.0.0", Accepted),
@@ -250,7 +253,7 @@ impl<'a, 'v> Visitor<'v> for PostExpansionVisitor<'a> {
     }
 
     fn visit_item(&mut self, i: &ast::Item) {
-        for attr in i.attrs.iter() {
+        for attr in &i.attrs {
             if attr.name() == "thread_local" {
                 self.gate_feature("thread_local", i.span,
                                   "`#[thread_local]` is an experimental feature, and does not \
@@ -271,6 +274,10 @@ impl<'a, 'v> Visitor<'v> for PostExpansionVisitor<'a> {
                 if attr::contains_name(&i.attrs[], "plugin") {
                     self.gate_feature("plugin", i.span,
                                       "compiler plugins are experimental \
+                                       and possibly buggy");
+                } else if attr::contains_name(&i.attrs[], "macro_reexport") {
+                    self.gate_feature("macro_reexport", i.span,
+                                      "macros reexports are experimental \
                                        and possibly buggy");
                 }
             }
@@ -501,7 +508,7 @@ fn check_crate_inner<F>(cm: &CodeMap, span_handler: &SpanHandler, krate: &ast::C
 
     let mut unknown_features = Vec::new();
 
-    for attr in krate.attrs.iter() {
+    for attr in &krate.attrs {
         if !attr.check_name("feature") {
             continue
         }
@@ -512,7 +519,7 @@ fn check_crate_inner<F>(cm: &CodeMap, span_handler: &SpanHandler, krate: &ast::C
                                                   expected #![feature(...)]");
             }
             Some(list) => {
-                for mi in list.iter() {
+                for mi in list {
                     let name = match mi.node {
                         ast::MetaWord(ref word) => (*word).clone(),
                         _ => {

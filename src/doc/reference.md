@@ -250,8 +250,7 @@ cases mentioned in [Number literals](#number-literals) below.
 ##### Unicode escapes
 |   | Name |
 |---|------|
-| `\u7FFF` | 16-bit character code (exactly 4 digits) |
-| `\U7EEEFFFF` | 32-bit character code (exactly 8 digits) |
+| `\u{7FFF}` | 24-bit Unicode character code (up to 6 digits) |
 
 ##### Numbers
 
@@ -268,7 +267,7 @@ cases mentioned in [Number literals](#number-literals) below.
 ##### Suffixes
 | Integer | Floating-point |
 |---------|----------------|
-| `is` (`isize`), `us` (`usize`), `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64` | `f32`, `f64` |
+| `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`, `is` (`isize`), `us` (`usize`) | `f32`, `f64` |
 
 #### Character and string literals
 
@@ -286,8 +285,8 @@ raw_string : '"' raw_string_body '"' | '#' raw_string '#' ;
 common_escape : '\x5c'
               | 'n' | 'r' | 't' | '0'
               | 'x' hex_digit 2
-unicode_escape : 'u' hex_digit 4
-               | 'U' hex_digit 8 ;
+
+unicode_escape : 'u' '{' hex_digit+ 6 '}';
 
 hex_digit : 'a' | 'b' | 'c' | 'd' | 'e' | 'f'
           | 'A' | 'B' | 'C' | 'D' | 'E' | 'F'
@@ -320,12 +319,9 @@ following forms:
 * An _8-bit codepoint escape_ escape starts with `U+0078` (`x`) and is
   followed by exactly two _hex digits_. It denotes the Unicode codepoint
   equal to the provided hex value.
-* A _16-bit codepoint escape_ starts with `U+0075` (`u`) and is followed
-  by exactly four _hex digits_. It denotes the Unicode codepoint equal to
-  the provided hex value.
-* A _32-bit codepoint escape_ starts with `U+0055` (`U`) and is followed
-  by exactly eight _hex digits_. It denotes the Unicode codepoint equal to
-  the provided hex value.
+* A _24-bit codepoint escape_ starts with `U+0075` (`u`) and is followed
+  by up to six _hex digits_ surrounded by braces `U+007B` (`{`) and `U+007D`
+  (`}`). It denotes the Unicode codepoint equal to the provided hex value.
 * A _whitespace escape_ is one of the characters `U+006E` (`n`), `U+0072`
   (`r`), or `U+0074` (`t`), denoting the unicode values `U+000A` (LF),
   `U+000D` (CR) or `U+0009` (HT) respectively.
@@ -468,27 +464,29 @@ Like any literal, an integer literal may be followed (immediately,
 without any spaces) by an _integer suffix_, which forcibly sets the
 type of the literal. There are 10 valid values for an integer suffix:
 
-* The `is` and `us` suffixes give the literal type `isize` or `usize`,
-  respectively.
 * Each of the signed and unsigned machine types `u8`, `i8`,
   `u16`, `i16`, `u32`, `i32`, `u64` and `i64`
   give the literal the corresponding machine type.
+* The `is` and `us` suffixes give the literal type `isize` or `usize`,
+  respectively.
 
 The type of an _unsuffixed_ integer literal is determined by type inference.
 If an integer type can be _uniquely_ determined from the surrounding program
 context, the unsuffixed integer literal has that type. If the program context
-underconstrains the type, it is considered a static type error; if the program
-context overconstrains the type, it is also considered a static type error.
+underconstrains the type, it defaults to the signed 32-bit integer `i32`; if
+the program context overconstrains the type, it is considered a static type
+error.
 
 Examples of integer literals of various forms:
 
 ```
-123is;                             // type isize
-123us;                             // type usize
-123_us;                            // type usize
+123i32;                            // type i32
+123u32;                            // type u32
+123_u32;                           // type u32
 0xff_u8;                           // type u8
 0o70_i16;                          // type i16
 0b1111_1111_1001_0000_i32;         // type i32
+0us;                               // type usize
 ```
 
 ##### Floating-point literals
@@ -1061,7 +1059,7 @@ mod foo {
     extern crate core;
 
     use foo::core::iter; // good: foo is at crate root
-//  use core::iter;      // bad:  native is not at the crate root
+//  use core::iter;      // bad:  core is not at the crate root
     use self::baz::foobaz;  // good: self refers to module 'foo'
     use foo::bar::foobar;   // good: foo is at crate root
 
@@ -1135,8 +1133,8 @@ used as a type name.
 
 When a generic function is referenced, its type is instantiated based on the
 context of the reference. For example, calling the `iter` function defined
-above on `[1, 2]` will instantiate type parameter `T` with `isize`, and require
-the closure parameter to have type `fn(isize)`.
+above on `[1, 2]` will instantiate type parameter `T` with `i32`, and require
+the closure parameter to have type `fn(i32)`.
 
 The type parameters can also be explicitly supplied in a trailing
 [path](#paths) component after the function name. This might be necessary if
@@ -2195,7 +2193,8 @@ The following configurations must be defined by the implementation:
   `"unix"` or `"windows"`. The value of this configuration option is defined
   as a configuration itself, like `unix` or `windows`.
 * `target_os = "..."`. Operating system of the target, examples include
-  `"win32"`, `"macos"`, `"linux"`, `"android"`, `"freebsd"` or `"dragonfly"`.
+  `"win32"`, `"macos"`, `"linux"`, `"android"`, `"freebsd"`, `"dragonfly"` or
+  `"openbsd"`.
 * `target_word_size = "..."`. Target word size in bits. This is set to `"32"`
   for targets with 32-bit pointers, and likewise set to `"64"` for 64-bit
   pointers.
@@ -2746,9 +2745,9 @@ constant expression that can be evaluated at compile time, such as a
 [literal](#literals) or a [static item](#static-items).
 
 ```
-[1is, 2, 3, 4];
+[1, 2, 3, 4];
 ["a", "b", "c", "d"];
-[0is; 128];            // array with 128 zeros
+[0; 128];              // array with 128 zeros
 [0u8, 0u8, 0u8, 0u8];
 ```
 
@@ -2921,7 +2920,7 @@ moves](#moved-and-copied-types) its right-hand operand to its left-hand
 operand.
 
 ```
-# let mut x = 0is;
+# let mut x = 0;
 # let y = 0;
 
 x = y;
@@ -2994,7 +2993,7 @@ Some examples of call expressions:
 # fn add(x: i32, y: i32) -> i32 { 0 }
 
 let x: i32 = add(1i32, 2i32);
-let pi: Option<f32> = "3.14".parse();
+let pi: Option<f32> = "3.14".parse().ok();
 ```
 
 ### Lambda expressions
@@ -3307,11 +3306,11 @@ fn main() {
 ```
 
 Patterns can also dereference pointers by using the `&`, `&mut` and `box`
-symbols, as appropriate. For example, these two matches on `x: &isize` are
+symbols, as appropriate. For example, these two matches on `x: &i32` are
 equivalent:
 
 ```
-# let x = &3is;
+# let x = &3;
 let y = match *x { 0 => "zero", _ => "some" };
 let z = match x { &0 => "zero", _ => "some" };
 
@@ -3332,7 +3331,7 @@ Multiple match patterns may be joined with the `|` operator. A range of values
 may be specified with `...`. For example:
 
 ```
-# let x = 2is;
+# let x = 2;
 
 let message = match x {
   0 | 1  => "not many",
@@ -3518,7 +3517,7 @@ An example of each kind:
 ```{rust}
 let vec: Vec<i32> = vec![1, 2, 3];
 let arr: [i32; 3] = [1, 2, 3];
-let s: &[i32] = vec.as_slice();
+let s: &[i32] = &vec;
 ```
 
 As you can see, the `vec!` macro allows you to create a `Vec<T>` easily. The
@@ -3673,16 +3672,16 @@ The type of a closure mapping an input of type `A` to an output of type `B` is
 An example of creating and calling a closure:
 
 ```rust
-let captured_var = 10is;
+let captured_var = 10;
 
 let closure_no_args = |&:| println!("captured_var={}", captured_var);
 
-let closure_args = |&: arg: isize| -> isize {
+let closure_args = |&: arg: i32| -> i32 {
   println!("captured_var={}, arg={}", captured_var, arg);
   arg // Note lack of semicolon after 'arg'
 };
 
-fn call_closure<F: Fn(), G: Fn(isize) -> isize>(c1: F, c2: G) {
+fn call_closure<F: Fn(), G: Fn(i32) -> i32>(c1: F, c2: G) {
   c1();
   c2(2);
 }
@@ -3714,7 +3713,7 @@ trait Printable {
   fn stringify(&self) -> String;
 }
 
-impl Printable for isize {
+impl Printable for i32 {
   fn stringify(&self) -> String { self.to_string() }
 }
 
@@ -3723,7 +3722,7 @@ fn print(a: Box<Printable>) {
 }
 
 fn main() {
-   print(Box::new(10is) as Box<Printable>);
+   print(Box::new(10) as Box<Printable>);
 }
 ```
 

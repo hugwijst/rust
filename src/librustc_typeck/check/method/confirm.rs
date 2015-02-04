@@ -31,8 +31,8 @@ use util::ppaux::Repr;
 struct ConfirmContext<'a, 'tcx:'a> {
     fcx: &'a FnCtxt<'a, 'tcx>,
     span: Span,
-    self_expr: &'a ast::Expr,
-    call_expr: &'a ast::Expr,
+    self_expr: &'tcx ast::Expr,
+    call_expr: &'tcx ast::Expr,
 }
 
 struct InstantiatedMethodSig<'tcx> {
@@ -51,8 +51,8 @@ struct InstantiatedMethodSig<'tcx> {
 
 pub fn confirm<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
                          span: Span,
-                         self_expr: &ast::Expr,
-                         call_expr: &ast::Expr,
+                         self_expr: &'tcx ast::Expr,
+                         call_expr: &'tcx ast::Expr,
                          unadjusted_self_ty: Ty<'tcx>,
                          pick: probe::Pick<'tcx>,
                          supplied_method_types: Vec<Ty<'tcx>>)
@@ -70,8 +70,8 @@ pub fn confirm<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
 impl<'a,'tcx> ConfirmContext<'a,'tcx> {
     fn new(fcx: &'a FnCtxt<'a, 'tcx>,
            span: Span,
-           self_expr: &'a ast::Expr,
-           call_expr: &'a ast::Expr)
+           self_expr: &'tcx ast::Expr,
+           call_expr: &'tcx ast::Expr)
            -> ConfirmContext<'a, 'tcx>
     {
         ConfirmContext { fcx: fcx, span: span, self_expr: self_expr, call_expr: call_expr }
@@ -347,9 +347,9 @@ impl<'a,'tcx> ConfirmContext<'a,'tcx> {
         let num_supplied_types = supplied_method_types.len();
         let num_method_types = pick.method_ty.generics.types.len(subst::FnSpace);
         let method_types = {
-            if num_supplied_types == 0u {
+            if num_supplied_types == 0 {
                 self.fcx.infcx().next_ty_vars(num_method_types)
-            } else if num_method_types == 0u {
+            } else if num_method_types == 0 {
                 span_err!(self.tcx().sess, self.span, E0035,
                     "does not take type parameters");
                 self.fcx.infcx().next_ty_vars(num_method_types)

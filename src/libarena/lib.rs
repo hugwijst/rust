@@ -21,7 +21,6 @@
 
 #![crate_name = "arena"]
 #![unstable(feature = "rustc_private")]
-#![feature(staged_api)]
 #![staged_api]
 #![crate_type = "rlib"]
 #![crate_type = "dylib"]
@@ -29,16 +28,14 @@
        html_favicon_url = "http://www.rust-lang.org/favicon.ico",
        html_root_url = "http://doc.rust-lang.org/nightly/")]
 
-#![allow(unknown_features)]
-#![feature(unsafe_destructor)]
-#![feature(unboxed_closures)]
-#![feature(box_syntax)]
-#![allow(unknown_features)] #![feature(int_uint)]
-#![allow(missing_docs)]
 #![feature(alloc)]
+#![feature(box_syntax)]
 #![feature(core)]
+#![feature(int_uint)]
+#![feature(staged_api)]
+#![feature(unboxed_closures)]
+#![feature(unsafe_destructor)]
 #![cfg_attr(test, feature(test))]
-#![cfg_attr(test, feature(collections))]
 
 extern crate alloc;
 
@@ -104,7 +101,7 @@ pub struct Arena {
 impl Arena {
     /// Allocates a new Arena with 32 bytes preallocated.
     pub fn new() -> Arena {
-        Arena::new_with_size(32u)
+        Arena::new_with_size(32)
     }
 
     /// Allocates a new Arena with `initial_size` bytes preallocated.
@@ -120,7 +117,7 @@ impl Arena {
 fn chunk(size: uint, is_copy: bool) -> Chunk {
     Chunk {
         data: Rc::new(RefCell::new(Vec::with_capacity(size))),
-        fill: Cell::new(0u),
+        fill: Cell::new(0),
         is_copy: Cell::new(is_copy),
     }
 }
@@ -130,7 +127,7 @@ impl Drop for Arena {
     fn drop(&mut self) {
         unsafe {
             destroy_chunk(&*self.head.borrow());
-            for chunk in self.chunks.borrow().iter() {
+            for chunk in &*self.chunks.borrow() {
                 if !chunk.is_copy.get() {
                     destroy_chunk(chunk);
                 }
@@ -196,7 +193,7 @@ impl Arena {
         self.chunks.borrow_mut().push(self.copy_head.borrow().clone());
 
         *self.copy_head.borrow_mut() =
-            chunk((new_min_chunk_size + 1u).next_power_of_two(), true);
+            chunk((new_min_chunk_size + 1).next_power_of_two(), true);
 
         return self.alloc_copy_inner(n_bytes, align);
     }
@@ -237,7 +234,7 @@ impl Arena {
         self.chunks.borrow_mut().push(self.head.borrow().clone());
 
         *self.head.borrow_mut() =
-            chunk((new_min_chunk_size + 1u).next_power_of_two(), false);
+            chunk((new_min_chunk_size + 1).next_power_of_two(), false);
 
         return self.alloc_noncopy_inner(n_bytes, align);
     }
@@ -311,7 +308,7 @@ impl Arena {
 #[test]
 fn test_arena_destructors() {
     let arena = Arena::new();
-    for i in 0u..10 {
+    for i in 0..10 {
         // Arena allocate something with drop glue to make sure it
         // doesn't leak.
         arena.alloc(|| Rc::new(i));
@@ -340,7 +337,7 @@ fn test_arena_alloc_nested() {
 fn test_arena_destructors_fail() {
     let arena = Arena::new();
     // Put some stuff in the arena.
-    for i in 0u..10 {
+    for i in 0..10 {
         // Arena allocate something with drop glue to make sure it
         // doesn't leak.
         arena.alloc(|| { Rc::new(i) });
@@ -530,7 +527,7 @@ mod tests {
     #[test]
     pub fn test_copy() {
         let arena = TypedArena::new();
-        for _ in 0u..100000 {
+        for _ in 0..100000 {
             arena.alloc(Point {
                 x: 1,
                 y: 2,
@@ -585,7 +582,7 @@ mod tests {
     #[test]
     pub fn test_noncopy() {
         let arena = TypedArena::new();
-        for _ in 0u..100000 {
+        for _ in 0..100000 {
             arena.alloc(Noncopy {
                 string: "hello world".to_string(),
                 array: vec!( 1, 2, 3, 4, 5 ),

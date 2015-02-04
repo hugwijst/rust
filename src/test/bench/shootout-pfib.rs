@@ -66,9 +66,9 @@ fn parse_opts(argv: Vec<String> ) -> Config {
 }
 
 fn stress_task(id: int) {
-    let mut i = 0i;
+    let mut i = 0;
     loop {
-        let n = 15i;
+        let n = 15;
         assert_eq!(fib(n), fib(n));
         i += 1;
         println!("{}: Completed {} iterations", id, i);
@@ -82,7 +82,7 @@ fn stress(num_tasks: int) {
             stress_task(i);
         }));
     }
-    for r in results.into_iter() {
+    for r in results {
         let _ = r.join();
     }
 }

@@ -8,8 +8,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::prelude::*;
-
 use boxed::Box;
 use cmp;
 use mem;
@@ -65,6 +63,13 @@ pub unsafe fn create(stack: uint, p: Thunk) -> rust_thread {
         panic!("failed to spawn native thread: {:?}", ret);
     }
     return ret;
+}
+
+pub unsafe fn set_name(_name: &str) {
+    // Windows threads are nameless
+    // The names in MSVC debugger are obtained using a "magic" exception,
+    // which requires a use of MS C++ extensions.
+    // See https://msdn.microsoft.com/en-us/library/xcb2z8hs.aspx
 }
 
 pub unsafe fn join(native: rust_thread) {

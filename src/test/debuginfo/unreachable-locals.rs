@@ -25,7 +25,7 @@ fn after_return() {
     match (20i32, 'c') {
         (a, ref b) => {}
     }
-    for a in [111i32].iter() {}
+    for a in &[111i32] {}
 }
 
 fn after_panic() {
@@ -35,7 +35,7 @@ fn after_panic() {
     match (20i32, 'c') {
         (a, ref b) => {}
     }
-    for a in [111i32].iter() {}
+    for a in &[111i32] {}
 }
 
 fn after_diverging_function() {
@@ -45,7 +45,7 @@ fn after_diverging_function() {
     match (20i32, 'c') {
         (a, ref b) => {}
     }
-    for a in [111i32].iter() {}
+    for a in &[111i32] {}
 }
 
 fn after_break() {
@@ -56,7 +56,7 @@ fn after_break() {
         match (20i32, 'c') {
             (a, ref b) => {}
         }
-        for a in [111i32].iter() {}
+        for a in &[111i32] {}
     }
 }
 
@@ -68,7 +68,7 @@ fn after_continue() {
         match (20i32, 'c') {
             (a, ref b) => {}
         }
-        for a in [111i32].iter() {}
+        for a in &[111i32] {}
     }
 }
 

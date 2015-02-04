@@ -100,6 +100,7 @@ pub fn explain_region_and_span(cx: &ctxt, region: ty::Region)
               ast::ExprMethodCall(..) => "method call",
               ast::ExprMatch(_, _, ast::MatchSource::IfLetDesugar { .. }) => "if let",
               ast::ExprMatch(_, _, ast::MatchSource::WhileLetDesugar) =>  "while let",
+              ast::ExprMatch(_, _, ast::MatchSource::ForLoopDesugar) =>  "for",
               ast::ExprMatch(..) => "match",
               _ => "expression",
           },
@@ -404,9 +405,9 @@ pub fn ty_to_string<'tcx>(cx: &ctxt<'tcx>, typ: &ty::TyS<'tcx>) -> String {
         }
         ty_str => "str".to_string(),
         ty_closure(ref did, _, substs) => {
-            let closures = cx.closures.borrow();
-            closures.get(did).map(|cl| {
-                closure_to_string(cx, &cl.closure_type.subst(cx, substs))
+            let closure_tys = cx.closure_tys.borrow();
+            closure_tys.get(did).map(|closure_type| {
+                closure_to_string(cx, &closure_type.subst(cx, substs))
             }).unwrap_or_else(|| {
                 if did.krate == ast::LOCAL_CRATE {
                     let span = cx.map.span(did.node);
@@ -493,11 +494,11 @@ pub fn parameterized<'tcx>(cx: &ctxt<'tcx>,
         0
     };
 
-    for t in tps[..tps.len() - num_defaults].iter() {
+    for t in &tps[..tps.len() - num_defaults] {
         strs.push(ty_to_string(cx, *t))
     }
 
-    for projection in projections.iter() {
+    for projection in projections {
         strs.push(format!("{}={}",
                           projection.projection_ty.item_name.user_string(cx),
                           projection.ty.user_string(cx)));
@@ -530,8 +531,8 @@ pub fn parameterized<'tcx>(cx: &ctxt<'tcx>,
 
 pub fn ty_to_short_str<'tcx>(cx: &ctxt<'tcx>, typ: Ty<'tcx>) -> String {
     let mut s = typ.repr(cx).to_string();
-    if s.len() >= 32u {
-        s = (&s[0u..32u]).to_string();
+    if s.len() >= 32 {
+        s = (&s[0u..32]).to_string();
     }
     return s;
 }
@@ -664,7 +665,7 @@ impl<'tcx> UserString<'tcx> for ty::TyTrait<'tcx> {
         components.push(tap.user_string(tcx));
 
         // Builtin bounds.
-        for bound in bounds.builtin_bounds.iter() {
+        for bound in &bounds.builtin_bounds {
             components.push(bound.user_string(tcx));
         }
 
@@ -747,7 +748,7 @@ impl<'tcx> Repr<'tcx> for subst::RegionSubsts {
 impl<'tcx> Repr<'tcx> for ty::BuiltinBounds {
     fn repr(&self, _tcx: &ctxt) -> String {
         let mut res = Vec::new();
-        for b in self.iter() {
+        for b in self {
             res.push(match b {
                 ty::BoundSend => "Send".to_string(),
                 ty::BoundSized => "Sized".to_string(),
@@ -763,7 +764,7 @@ impl<'tcx> Repr<'tcx> for ty::ParamBounds<'tcx> {
     fn repr(&self, tcx: &ctxt<'tcx>) -> String {
         let mut res = Vec::new();
         res.push(self.builtin_bounds.repr(tcx));
-        for t in self.trait_bounds.iter() {
+        for t in &self.trait_bounds {
             res.push(t.repr(tcx));
         }
         res.connect("+")
@@ -1156,7 +1157,7 @@ impl<'tcx> UserString<'tcx> for ty::ParamBounds<'tcx> {
         if !s.is_empty() {
             result.push(s);
         }
-        for n in self.trait_bounds.iter() {
+        for n in &self.trait_bounds {
             result.push(n.user_string(tcx));
         }
         result.connect(" + ")
@@ -1172,11 +1173,11 @@ impl<'tcx> Repr<'tcx> for ty::ExistentialBounds<'tcx> {
             res.push(region_str);
         }
 
-        for bound in self.builtin_bounds.iter() {
+        for bound in &self.builtin_bounds {
             res.push(bound.user_string(tcx));
         }
 
-        for projection_bound in self.projection_bounds.iter() {
+        for projection_bound in &self.projection_bounds {
             res.push(projection_bound.user_string(tcx));
         }
 

@@ -22,6 +22,7 @@ use util::ppaux::UserString;
 
 use syntax::{ast, ast_util};
 use syntax::codemap::Span;
+use syntax::print::pprust;
 
 use std::cell;
 use std::cmp::Ordering;
@@ -32,8 +33,14 @@ pub fn report_error<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
                               span: Span,
                               rcvr_ty: Ty<'tcx>,
                               method_name: ast::Name,
+                              callee_expr: &ast::Expr,
                               error: MethodError)
 {
+    // avoid suggestions when we don't know what's going on.
+    if ty::type_is_error(rcvr_ty) {
+        return
+    }
+
     match error {
         MethodError::NoMatch(static_sources, out_of_scope_traits) => {
             let cx = fcx.tcx();
@@ -84,6 +91,18 @@ pub fn report_error<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
 
             report_candidates(fcx, span, method_name, sources);
         }
+
+        MethodError::ClosureAmbiguity(trait_def_id) => {
+            fcx.sess().span_err(
+                span,
+                &*format!("the `{}` method from the `{}` trait cannot be explicitly \
+                           invoked on this closure as we have not yet inferred what \
+                           kind of closure it is; use overloaded call notation instead \
+                           (e.g., `{}()`)",
+                          method_name.user_string(fcx.tcx()),
+                          ty::item_path_str(fcx.tcx(), trait_def_id),
+                          pprust::expr_to_string(callee_expr)));
+        }
     }
 
     fn report_candidates(fcx: &FnCtxt,
@@ -113,7 +132,7 @@ pub fn report_error<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
 
                     span_note!(fcx.sess(), method_span,
                                "candidate #{} is defined in an impl{} for the type `{}`",
-                               idx + 1u,
+                               idx + 1,
                                insertion,
                                impl_ty.user_string(fcx.tcx()));
                 }
@@ -122,7 +141,7 @@ pub fn report_error<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
                     let method_span = fcx.tcx().map.def_id_span(method.def_id, span);
                     span_note!(fcx.sess(), method_span,
                                "candidate #{} is defined in the trait `{}`",
-                               idx + 1u,
+                               idx + 1,
                                ty::item_path_str(fcx.tcx(), trait_did));
                 }
             }
@@ -135,7 +154,7 @@ pub type AllTraitsVec = Vec<TraitInfo>;
 
 fn suggest_traits_to_import<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
                                       span: Span,
-                                      _rcvr_ty: Ty<'tcx>,
+                                      rcvr_ty: Ty<'tcx>,
                                       method_name: ast::Name,
                                       valid_out_of_scope_traits: Vec<ast::DefId>)
 {
@@ -165,9 +184,22 @@ fn suggest_traits_to_import<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
         return
     }
 
-    // there's no implemented traits, so lets suggest some traits to implement
+    let type_is_local = type_derefs_to_local(fcx, span, rcvr_ty);
+
+    // there's no implemented traits, so lets suggest some traits to
+    // implement, by finding ones that have the method name, and are
+    // legal to implement.
     let mut candidates = all_traits(fcx.ccx)
-        .filter(|info| trait_method(tcx, info.def_id, method_name).is_some())
+        .filter(|info| {
+            // we approximate the coherence rules to only suggest
+            // traits that are legal to implement by requiring that
+            // either the type or trait is local. Multidispatch means
+            // this isn't perfect (that is, there are cases when
+            // implementing a trait would be legal but is rejected
+            // here).
+            (type_is_local || ast_util::is_local(info.def_id))
+                && trait_method(tcx, info.def_id, method_name).is_some()
+        })
         .collect::<Vec<_>>();
 
     if candidates.len() > 0 {
@@ -175,6 +207,9 @@ fn suggest_traits_to_import<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
         candidates.sort_by(|a, b| a.cmp(b).reverse());
         candidates.dedup();
 
+        // FIXME #21673 this help message could be tuned to the case
+        // of a type parameter: suggest adding a trait bound rather
+        // than implementing.
         let msg = format!(
             "methods from traits can only be called if the trait is implemented and in scope; \
              the following {traits_define} a method `{name}`, \
@@ -192,6 +227,39 @@ fn suggest_traits_to_import<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
                                                ty::item_path_str(fcx.tcx(), trait_info.def_id)))
         }
     }
+}
+
+/// Checks whether there is a local type somewhere in the chain of
+/// autoderefs of `rcvr_ty`.
+fn type_derefs_to_local<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
+                                  span: Span,
+                                  rcvr_ty: Ty<'tcx>) -> bool {
+    check::autoderef(fcx, span, rcvr_ty, None,
+                     check::UnresolvedTypeAction::Ignore, check::NoPreference,
+                     |&: ty, _| {
+        let is_local = match ty.sty {
+            ty::ty_enum(did, _) | ty::ty_struct(did, _) => ast_util::is_local(did),
+
+            ty::ty_trait(ref tr) => ast_util::is_local(tr.principal_def_id()),
+
+            ty::ty_param(_) => true,
+
+            // the user cannot implement traits for unboxed closures, so
+            // there's no point suggesting anything at all, local or not.
+            ty::ty_closure(..) => return Some(false),
+
+            // everything else (primitive types etc.) is effectively
+            // non-local (there are "edge" cases, e.g. (LocalType,), but
+            // the noise from these sort of types is usually just really
+            // annoying, rather than any sort of help).
+            _ => false
+        };
+        if is_local {
+            Some(true)
+        } else {
+            None
+        }
+    }).2.unwrap_or(false)
 }
 
 #[derive(Copy)]

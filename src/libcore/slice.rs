@@ -41,12 +41,8 @@ use cmp::Ordering::{Less, Equal, Greater};
 use cmp;
 use default::Default;
 use iter::*;
-use marker::Copy;
 use num::Int;
 use ops::{FnMut, self, Index};
-#[cfg(stage0)]
-use ops::FullRange as RangeFull;
-#[cfg(not(stage0))]
 use ops::RangeFull;
 use option::Option;
 use option::Option::{None, Some};
@@ -637,6 +633,22 @@ impl<'a, T> Default for &'a [T] {
 // Iterators
 //
 
+impl<'a, T> IntoIterator for &'a [T] {
+    type Iter = Iter<'a, T>;
+
+    fn into_iter(self) -> Iter<'a, T> {
+        self.iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a mut [T] {
+    type Iter = IterMut<'a, T>;
+
+    fn into_iter(self) -> IterMut<'a, T> {
+        self.iter_mut()
+    }
+}
+
 // The shared definition of the `Iter` and `IterMut` iterators
 macro_rules! iterator {
     (struct $name:ident -> $ptr:ty, $elem:ty) => {
@@ -754,16 +766,6 @@ impl<'a, T> ops::Index<ops::RangeFrom<uint>> for Iter<'a, T> {
     }
 }
 
-#[cfg(stage0)]
-#[unstable(feature = "core")]
-impl<'a, T> ops::Index<ops::FullRange> for Iter<'a, T> {
-    type Output = [T];
-    #[inline]
-    fn index(&self, _index: &ops::FullRange) -> &[T] {
-        self.as_slice()
-    }
-}
-#[cfg(not(stage0))]
 #[unstable(feature = "core")]
 impl<'a, T> ops::Index<RangeFull> for Iter<'a, T> {
     type Output = [T];
@@ -784,8 +786,6 @@ impl<'a, T> Iter<'a, T> {
     }
 }
 
-impl<'a,T> Copy for Iter<'a,T> {}
-
 iterator!{struct Iter -> *const T, &'a T}
 
 #[stable(feature = "rust1", since = "1.0.0")]
@@ -793,7 +793,7 @@ impl<'a, T> ExactSizeIterator for Iter<'a, T> {}
 
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<'a, T> Clone for Iter<'a, T> {
-    fn clone(&self) -> Iter<'a, T> { *self }
+    fn clone(&self) -> Iter<'a, T> { Iter { ptr: self.ptr, end: self.end, marker: self.marker } }
 }
 
 #[unstable(feature = "core", reason = "trait is experimental")]

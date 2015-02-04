@@ -25,8 +25,7 @@ use iter::{AdditiveIterator, Extend};
 use iter::{Iterator, IteratorExt, Map, repeat};
 use mem;
 use option::Option::{self, Some, None};
-#[cfg(stage0)]
-use ops::FullRange;
+use result::Result::{self, Ok, Err};
 use slice::{SliceExt, SliceConcatExt};
 use str::{SplitTerminator, FromStr, StrExt};
 use string::{String, ToString};
@@ -39,11 +38,11 @@ use super::{contains_nul, BytesContainer, GenericPath, GenericPathUnsafe};
 /// Each component is yielded as Option<&str> for compatibility with PosixPath, but
 /// every component in WindowsPath is guaranteed to be Some.
 pub type StrComponents<'a> =
-    Map<&'a str, Option<&'a str>, SplitTerminator<'a, char>, fn(&'a str) -> Option<&'a str>>;
+    Map<SplitTerminator<'a, char>, fn(&'a str) -> Option<&'a str>>;
 
 /// Iterator that yields successive components of a Path as &[u8]
 pub type Components<'a> =
-    Map<Option<&'a str>, &'a [u8], StrComponents<'a>, fn(Option<&str>) -> &[u8]>;
+    Map<StrComponents<'a>, fn(Option<&str>) -> &[u8]>;
 
 /// Represents a Windows path
 // Notes for Windows path impl:
@@ -115,10 +114,18 @@ impl Ord for Path {
 }
 
 impl FromStr for Path {
-    fn from_str(s: &str) -> Option<Path> {
-        Path::new_opt(s)
+    type Err = ParsePathError;
+    fn from_str(s: &str) -> Result<Path, ParsePathError> {
+        match Path::new_opt(s) {
+            Some(p) => Ok(p),
+            None => Err(ParsePathError),
+        }
     }
 }
+
+/// Value indicating that a path could not be parsed from a string.
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct ParsePathError;
 
 impl<S: hash::Writer + hash::Hasher> hash::Hash<S> for Path {
     #[cfg(not(test))]
@@ -557,7 +564,7 @@ impl GenericPath for Path {
                     }
                     (Some(a), Some(_)) => {
                         comps.push("..");
-                        for _ in itb {
+                        for _ in itb.by_ref() {
                             comps.push("..");
                         }
                         comps.push(a);

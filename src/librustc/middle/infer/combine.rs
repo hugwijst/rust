@@ -116,7 +116,7 @@ pub trait Combine<'tcx> : Sized {
     {
         let mut substs = subst::Substs::empty();
 
-        for &space in subst::ParamSpace::all().iter() {
+        for &space in &subst::ParamSpace::all() {
             let a_tps = a_subst.types.get_slice(space);
             let b_tps = b_subst.types.get_slice(space);
             let tps = try!(self.tps(space, a_tps, b_tps));
@@ -129,7 +129,7 @@ pub trait Combine<'tcx> : Sized {
             }
 
             (&NonerasedRegions(ref a), &NonerasedRegions(ref b)) => {
-                for &space in subst::ParamSpace::all().iter() {
+                for &space in &subst::ParamSpace::all() {
                     let a_regions = a.get_slice(space);
                     let b_regions = b.get_slice(space);
 
@@ -139,7 +139,7 @@ pub trait Combine<'tcx> : Sized {
                             variances.regions.get_slice(space)
                         }
                         None => {
-                            for _ in a_regions.iter() {
+                            for _ in a_regions {
                                 invariance.push(ty::Invariant);
                             }
                             &invariance[]
@@ -263,7 +263,13 @@ pub trait Combine<'tcx> : Sized {
             Err(ty::terr_projection_name_mismatched(
                 expected_found(self, a.item_name, b.item_name)))
         } else {
-            let trait_ref = try!(self.trait_refs(&*a.trait_ref, &*b.trait_ref));
+            // Note that the trait refs for the projection must be
+            // *equal*. This is because there is no inherent
+            // relationship between `<T as Foo>::Bar` and `<U as
+            // Foo>::Bar` that we can derive based on how `T` relates
+            // to `U`. Issue #21726 contains further discussion and
+            // in-depth examples.
+            let trait_ref = try!(self.equate().trait_refs(&*a.trait_ref, &*b.trait_ref));
             Ok(ty::ProjectionTy { trait_ref: Rc::new(trait_ref), item_name: a.item_name })
         }
     }

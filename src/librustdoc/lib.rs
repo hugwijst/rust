@@ -10,7 +10,6 @@
 
 #![crate_name = "rustdoc"]
 #![unstable(feature = "rustdoc")]
-#![feature(staged_api)]
 #![staged_api]
 #![crate_type = "dylib"]
 #![crate_type = "rlib"]
@@ -18,20 +17,23 @@
        html_favicon_url = "http://www.rust-lang.org/favicon.ico",
        html_root_url = "http://doc.rust-lang.org/nightly/",
        html_playground_url = "http://play.rust-lang.org/")]
-#![feature(slicing_syntax)]
+
 #![feature(box_syntax)]
-#![allow(unknown_features)] #![feature(int_uint)]
 #![feature(collections)]
 #![feature(core)]
+#![feature(env)]
+#![feature(hash)]
+#![feature(int_uint)]
 #![feature(io)]
 #![feature(libc)]
 #![feature(os)]
 #![feature(path)]
 #![feature(rustc_private)]
+#![feature(slicing_syntax)]
+#![feature(staged_api)]
 #![feature(std_misc)]
 #![feature(test)]
 #![feature(unicode)]
-#![feature(hash)]
 
 extern crate arena;
 extern crate getopts;
@@ -49,6 +51,7 @@ extern crate "serialize" as rustc_serialize; // used by deriving
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::env;
 use std::old_io::File;
 use std::old_io;
 use std::rc::Rc;
@@ -120,9 +123,10 @@ struct Output {
 pub fn main() {
     static STACK_SIZE: uint = 32000000; // 32MB
     let res = std::thread::Builder::new().stack_size(STACK_SIZE).scoped(move || {
-        main_args(std::os::args().as_slice())
+        let s = env::args().map(|s| s.into_string().unwrap());
+        main_args(&s.collect::<Vec<_>>())
     }).join();
-    std::os::set_exit_status(res.ok().unwrap());
+    env::set_exit_status(res.ok().unwrap() as i32);
 }
 
 pub fn opts() -> Vec<getopts::OptGroup> {
@@ -196,11 +200,11 @@ pub fn main_args(args: &[String]) -> int {
 
     if matches.opt_strs("passes") == ["list"] {
         println!("Available passes for running rustdoc:");
-        for &(name, _, description) in PASSES.iter() {
+        for &(name, _, description) in PASSES {
             println!("{:>20} - {}", name, description);
         }
         println!("{}", "\nDefault passes for rustdoc:"); // FIXME: #9970
-        for &name in DEFAULT_PASSES.iter() {
+        for &name in DEFAULT_PASSES {
             println!("{:>20}", name);
         }
         return 0;
@@ -216,7 +220,7 @@ pub fn main_args(args: &[String]) -> int {
     let input = matches.free[0].as_slice();
 
     let mut libs = SearchPaths::new();
-    for s in matches.opt_strs("L").iter() {
+    for s in &matches.opt_strs("L") {
         libs.add_path(s.as_slice());
     }
     let externs = match parse_externs(&matches) {
@@ -318,7 +322,7 @@ fn acquire_input(input: &str,
 /// error message.
 fn parse_externs(matches: &getopts::Matches) -> Result<core::Externs, String> {
     let mut externs = HashMap::new();
-    for arg in matches.opt_strs("extern").iter() {
+    for arg in &matches.opt_strs("extern") {
         let mut parts = arg.splitn(1, '=');
         let name = match parts.next() {
             Some(s) => s,
@@ -352,7 +356,7 @@ fn rust_input(cratefile: &str, externs: core::Externs, matches: &getopts::Matche
 
     // First, parse the crate and extract all relevant information.
     let mut paths = SearchPaths::new();
-    for s in matches.opt_strs("L").iter() {
+    for s in &matches.opt_strs("L") {
         paths.add_path(s.as_slice());
     }
     let cfgs = matches.opt_strs("cfg");
@@ -382,7 +386,7 @@ fn rust_input(cratefile: &str, externs: core::Externs, matches: &getopts::Matche
     // with the passes which we are supposed to run.
     match krate.module.as_ref().unwrap().doc_list() {
         Some(nested) => {
-            for inner in nested.iter() {
+            for inner in nested {
                 match *inner {
                     clean::Word(ref x)
                             if "no_default_passes" == *x => {
@@ -416,7 +420,7 @@ fn rust_input(cratefile: &str, externs: core::Externs, matches: &getopts::Matche
     let path = matches.opt_str("plugin-path")
                       .unwrap_or("/tmp/rustdoc/plugins".to_string());
     let mut pm = plugins::PluginManager::new(Path::new(path));
-    for pass in passes.iter() {
+    for pass in &passes {
         let plugin = match PASSES.iter()
                                  .position(|&(p, _, _)| {
                                      p == *pass
@@ -430,7 +434,7 @@ fn rust_input(cratefile: &str, externs: core::Externs, matches: &getopts::Matche
         pm.add_plugin(plugin);
     }
     info!("loading plugins...");
-    for pname in plugins.into_iter() {
+    for pname in plugins {
         pm.load_plugin(pname);
     }
 

@@ -597,7 +597,7 @@ pub fn mkdir_recursive(path: &Path, mode: FilePermission) -> IoResult<()> {
         return Ok(())
     }
 
-    let mut comps = path.components();
+    let comps = path.components();
     let mut curpath = path.root_path().unwrap_or(Path::new("."));
 
     for c in comps {
@@ -649,7 +649,7 @@ pub fn rmdir_recursive(path: &Path) -> IoResult<()> {
 
         // delete all regular files in the way and push subdirs
         // on the stack
-        for child in children.into_iter() {
+        for child in children {
             // FIXME(#12795) we should use lstat in all cases
             let child_type = match cfg!(windows) {
                 true => try!(update_err(stat(&child), path)),
@@ -981,7 +981,7 @@ mod test {
         let initial_msg =   "food-is-yummy";
         let overwrite_msg =    "-the-bar!!";
         let final_msg =     "foo-the-bar!!";
-        let seek_idx = 3i;
+        let seek_idx = 3;
         let mut read_mem = [0; 13];
         let tmpdir = tmpdir();
         let filename = &tmpdir.join("file_rt_io_file_test_seek_and_write.txt");
@@ -1101,16 +1101,16 @@ mod test {
         let dir = &tmpdir.join("di_readdir");
         check!(mkdir(dir, old_io::USER_RWX));
         let prefix = "foo";
-        for n in 0i..3 {
+        for n in 0..3 {
             let f = dir.join(format!("{}.txt", n));
             let mut w = check!(File::create(&f));
-            let msg_str = format!("{}{}", prefix, n.to_string());
+            let msg_str = format!("{}{}", prefix, n);
             let msg = msg_str.as_bytes();
             check!(w.write(msg));
         }
         let files = check!(readdir(dir));
         let mut mem = [0u8; 4];
-        for f in files.iter() {
+        for f in &files {
             {
                 let n = f.filestem_str();
                 check!(File::open(f).read(&mut mem));

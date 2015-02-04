@@ -454,7 +454,7 @@ impl<'t,'tcx,TYPER:Typer<'tcx>> MemCategorizationContext<'t,TYPER> {
         debug!("cat_expr_autoderefd: autoderefs={}, cmt={}",
                autoderefs,
                cmt.repr(self.tcx()));
-        for deref in 1u..autoderefs + 1 {
+        for deref in 1..autoderefs + 1 {
             cmt = try!(self.cat_deref(expr, cmt, deref));
         }
         return Ok(cmt);
@@ -534,8 +534,7 @@ impl<'t,'tcx,TYPER:Typer<'tcx>> MemCategorizationContext<'t,TYPER> {
           ast::ExprBlock(..) | ast::ExprLoop(..) | ast::ExprMatch(..) |
           ast::ExprLit(..) | ast::ExprBreak(..) | ast::ExprMac(..) |
           ast::ExprAgain(..) | ast::ExprStruct(..) | ast::ExprRepeat(..) |
-          ast::ExprInlineAsm(..) | ast::ExprBox(..) |
-          ast::ExprForLoop(..) => {
+          ast::ExprInlineAsm(..) | ast::ExprBox(..) => {
             Ok(self.cat_rvalue_node(expr.id(), expr.span(), expr_ty))
           }
 
@@ -544,6 +543,9 @@ impl<'t,'tcx,TYPER:Typer<'tcx>> MemCategorizationContext<'t,TYPER> {
           }
           ast::ExprWhileLet(..) => {
             self.tcx().sess.span_bug(expr.span, "non-desugared ExprWhileLet");
+          }
+          ast::ExprForLoop(..) => {
+            self.tcx().sess.span_bug(expr.span, "non-desugared ExprForLoop");
           }
         }
     }
@@ -592,8 +594,16 @@ impl<'t,'tcx,TYPER:Typer<'tcx>> MemCategorizationContext<'t,TYPER> {
               let ty = try!(self.node_ty(fn_node_id));
               match ty.sty {
                   ty::ty_closure(closure_id, _, _) => {
-                      let kind = self.typer.closure_kind(closure_id);
-                      self.cat_upvar(id, span, var_id, fn_node_id, kind)
+                      match self.typer.closure_kind(closure_id) {
+                          Some(kind) => {
+                              self.cat_upvar(id, span, var_id, fn_node_id, kind)
+                          }
+                          None => {
+                              self.tcx().sess.span_bug(
+                                  span,
+                                  &*format!("No closure kind for {:?}", closure_id));
+                          }
+                      }
                   }
                   _ => {
                       self.tcx().sess.span_bug(
@@ -1198,7 +1208,7 @@ impl<'t,'tcx,TYPER:Typer<'tcx>> MemCategorizationContext<'t,TYPER> {
                     }
                 }
                 Some(&def::DefConst(..)) => {
-                    for subpat in subpats.iter() {
+                    for subpat in subpats {
                         try!(self.cat_pattern_(cmt.clone(), &**subpat, op));
                     }
                 }
@@ -1220,7 +1230,7 @@ impl<'t,'tcx,TYPER:Typer<'tcx>> MemCategorizationContext<'t,TYPER> {
 
           ast::PatStruct(_, ref field_pats, _) => {
             // {f1: p1, ..., fN: pN}
-            for fp in field_pats.iter() {
+            for fp in field_pats {
                 let field_ty = try!(self.pat_ty(&*fp.node.pat)); // see (*2)
                 let cmt_field = self.cat_field(pat, cmt.clone(), fp.node.ident.name, field_ty);
                 try!(self.cat_pattern_(cmt_field, &*fp.node.pat, op));
@@ -1249,15 +1259,15 @@ impl<'t,'tcx,TYPER:Typer<'tcx>> MemCategorizationContext<'t,TYPER> {
 
           ast::PatVec(ref before, ref slice, ref after) => {
               let elt_cmt = try!(self.cat_index(pat, try!(self.deref_vec(pat, cmt))));
-              for before_pat in before.iter() {
+              for before_pat in before {
                   try!(self.cat_pattern_(elt_cmt.clone(), &**before_pat, op));
               }
-              for slice_pat in slice.iter() {
+              if let Some(ref slice_pat) = *slice {
                   let slice_ty = try!(self.pat_ty(&**slice_pat));
                   let slice_cmt = self.cat_rvalue_node(pat.id(), pat.span(), slice_ty);
                   try!(self.cat_pattern_(slice_cmt, &**slice_pat, op));
               }
-              for after_pat in after.iter() {
+              for after_pat in after {
                   try!(self.cat_pattern_(elt_cmt.clone(), &**after_pat, op));
               }
           }

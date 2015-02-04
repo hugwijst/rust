@@ -273,7 +273,7 @@ pub fn self_type_for_closure<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
 }
 
 pub fn kind_for_closure(ccx: &CrateContext, closure_id: ast::DefId) -> ty::ClosureKind {
-    ccx.tcx().closures.borrow()[closure_id].kind
+    ccx.tcx().closure_kinds.borrow()[closure_id]
 }
 
 pub fn decl_rust_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
@@ -350,7 +350,7 @@ pub fn get_extern_const<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>, did: ast::DefId,
         // don't do this then linker errors can be generated where the linker
         // complains that one object files has a thread local version of the
         // symbol and another one doesn't.
-        for attr in ty::get_attrs(ccx.tcx(), did).iter() {
+        for attr in &*ty::get_attrs(ccx.tcx(), did) {
             if attr.check_name("thread_local") {
                 llvm::set_thread_local(c, true);
             }
@@ -401,7 +401,7 @@ pub fn get_tydesc<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
         _ => { }
     }
 
-    ccx.stats().n_static_tydescs.set(ccx.stats().n_static_tydescs.get() + 1u);
+    ccx.stats().n_static_tydescs.set(ccx.stats().n_static_tydescs.get() + 1);
     let inf = Rc::new(glue::declare_tydesc(ccx, t));
 
     ccx.tydescs().borrow_mut().insert(t, inf.clone());
@@ -442,7 +442,7 @@ pub fn set_llvm_fn_attrs(ccx: &CrateContext, attrs: &[ast::Attribute], llfn: Val
         InlineNone   => { /* fallthrough */ }
     }
 
-    for attr in attrs.iter() {
+    for attr in attrs {
         let mut used = true;
         match attr.name().get() {
             "no_stack_check" => unset_split_stack(llfn),
@@ -623,7 +623,7 @@ pub fn compare_simd_types<'blk, 'tcx>(
                     size: uint,
                     op: ast::BinOp)
                     -> ValueRef {
-    match t.sty {
+    let cmp = match t.sty {
         ty::ty_float(_) => {
             // The comparison operators for floating point vectors are challenging.
             // LLVM outputs a `< size x i1 >`, but if we perform a sign extension
@@ -632,25 +632,32 @@ pub fn compare_simd_types<'blk, 'tcx>(
             cx.sess().bug("compare_simd_types: comparison operators \
                            not supported for floating point SIMD types")
         },
-        ty::ty_uint(_) | ty::ty_int(_) => {
-            let cmp = match op.node {
-                ast::BiEq => llvm::IntEQ,
-                ast::BiNe => llvm::IntNE,
-                ast::BiLt => llvm::IntSLT,
-                ast::BiLe => llvm::IntSLE,
-                ast::BiGt => llvm::IntSGT,
-                ast::BiGe => llvm::IntSGE,
-                _ => cx.sess().bug("compare_simd_types: must be a comparison operator"),
-            };
-            let return_ty = Type::vector(&type_of(cx.ccx(), t), size as u64);
-            // LLVM outputs an `< size x i1 >`, so we need to perform a sign extension
-            // to get the correctly sized type. This will compile to a single instruction
-            // once the IR is converted to assembly if the SIMD instruction is supported
-            // by the target architecture.
-            SExt(cx, ICmp(cx, cmp, lhs, rhs), return_ty)
+        ty::ty_uint(_) => match op.node {
+            ast::BiEq => llvm::IntEQ,
+            ast::BiNe => llvm::IntNE,
+            ast::BiLt => llvm::IntULT,
+            ast::BiLe => llvm::IntULE,
+            ast::BiGt => llvm::IntUGT,
+            ast::BiGe => llvm::IntUGE,
+            _ => cx.sess().bug("compare_simd_types: must be a comparison operator"),
+        },
+        ty::ty_int(_) => match op.node {
+            ast::BiEq => llvm::IntEQ,
+            ast::BiNe => llvm::IntNE,
+            ast::BiLt => llvm::IntSLT,
+            ast::BiLe => llvm::IntSLE,
+            ast::BiGt => llvm::IntSGT,
+            ast::BiGe => llvm::IntSGE,
+            _ => cx.sess().bug("compare_simd_types: must be a comparison operator"),
         },
         _ => cx.sess().bug("compare_simd_types: invalid SIMD type"),
-    }
+    };
+    let return_ty = Type::vector(&type_of(cx.ccx(), t), size as u64);
+    // LLVM outputs an `< size x i1 >`, so we need to perform a sign extension
+    // to get the correctly sized type. This will compile to a single instruction
+    // once the IR is converted to assembly if the SIMD instruction is supported
+    // by the target architecture.
+    SExt(cx, ICmp(cx, cmp, lhs, rhs), return_ty)
 }
 
 // Iterates through the elements of a structural type.
@@ -758,7 +765,7 @@ pub fn iter_structural_ty<'blk, 'tcx, F>(cx: Block<'blk, 'tcx>,
                                         n_variants);
                   let next_cx = fcx.new_temp_block("enum-iter-next");
 
-                  for variant in (*variants).iter() {
+                  for variant in &(*variants) {
                       let variant_cx =
                           fcx.new_temp_block(
                               &format!("enum-iter-variant-{}",
@@ -963,7 +970,7 @@ pub fn invoke<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
 
     if need_invoke(bcx) {
         debug!("invoking {} at {:?}", bcx.val_to_string(llfn), bcx.llbb);
-        for &llarg in llargs.iter() {
+        for &llarg in llargs {
             debug!("arg: {}", bcx.val_to_string(llarg));
         }
         let normal_bcx = bcx.fcx.new_temp_block("normal-return");
@@ -979,7 +986,7 @@ pub fn invoke<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
         return (llresult, normal_bcx);
     } else {
         debug!("calling {} at {:?}", bcx.val_to_string(llfn), bcx.llbb);
-        for &llarg in llargs.iter() {
+        for &llarg in llargs {
             debug!("arg: {}", bcx.val_to_string(llarg));
         }
 
@@ -1823,7 +1830,7 @@ pub fn trans_closure<'a, 'b, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
             vec![ty::mk_tup(ccx.tcx(), monomorphized_arg_types)]
         }
     };
-    for monomorphized_arg_type in monomorphized_arg_types.iter() {
+    for monomorphized_arg_type in &monomorphized_arg_types {
         debug!("trans_closure: monomorphized_arg_type: {}",
                ty_to_string(ccx.tcx(), *monomorphized_arg_type));
     }
@@ -1901,7 +1908,7 @@ pub fn trans_closure<'a, 'b, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
     // This somewhat improves single-stepping experience in debugger.
     unsafe {
         let llreturn = fcx.llreturn.get();
-        for &llreturn in llreturn.iter() {
+        if let Some(llreturn) = llreturn {
             llvm::LLVMMoveBasicBlockAfter(llreturn, bcx.llbb);
         }
     }
@@ -2012,7 +2019,11 @@ pub fn trans_named_tuple_constructor<'blk, 'tcx>(mut bcx: Block<'blk, 'tcx>,
     let bcx = match dest {
         expr::SaveIn(_) => bcx,
         expr::Ignore => {
-            glue::drop_ty(bcx, llresult, result_ty, debug_loc)
+            let bcx = glue::drop_ty(bcx, llresult, result_ty, debug_loc);
+            if !type_is_zero_size(ccx, result_ty) {
+                call_lifetime_end(bcx, llresult);
+            }
+            bcx
         }
     };
 
@@ -2102,7 +2113,7 @@ fn enum_variant_size_lint(ccx: &CrateContext, enum_def: &ast::EnumDef, sp: Span,
     let avar = adt::represent_type(ccx, ty);
     match *avar {
         adt::General(_, ref variants, _) => {
-            for var in variants.iter() {
+            for var in variants {
                 let mut size = 0;
                 for field in var.fields.iter().skip(1) {
                     // skip the discriminant
@@ -2375,7 +2386,7 @@ pub fn trans_item(ccx: &CrateContext, item: &ast::Item) {
 // and control visibility.
 pub fn trans_mod(ccx: &CrateContext, m: &ast::Mod) {
     let _icx = push_ctxt("trans_mod");
-    for item in m.items.iter() {
+    for item in &m.items {
         trans_item(ccx, &**item);
     }
 }
@@ -2872,7 +2883,7 @@ pub fn get_item_val(ccx: &CrateContext, id: ast::NodeId) -> ValueRef {
                     panic!("struct variant kind unexpected in get_item_val")
                 }
             };
-            assert!(args.len() != 0u);
+            assert!(args.len() != 0);
             let ty = ty::node_id_to_type(ccx.tcx(), id);
             let parent = ccx.tcx().map.get_parent(id);
             let enm = ccx.tcx().map.expect_item(parent);
@@ -3154,7 +3165,7 @@ pub fn trans_crate<'tcx>(analysis: ty::CrateAnalysis<'tcx>)
         stats.fn_stats.borrow_mut().sort_by(|&(_, insns_a), &(_, insns_b)| {
             insns_b.cmp(&insns_a)
         });
-        for tuple in stats.fn_stats.borrow().iter() {
+        for tuple in &*stats.fn_stats.borrow() {
             match *tuple {
                 (ref name, insns) => {
                     println!("{} insns, {}", insns, *name);
@@ -3163,7 +3174,7 @@ pub fn trans_crate<'tcx>(analysis: ty::CrateAnalysis<'tcx>)
         }
     }
     if shared_ccx.sess().count_llvm_insns() {
-        for (k, v) in shared_ccx.stats().llvm_insns.borrow().iter() {
+        for (k, v) in &*shared_ccx.stats().llvm_insns.borrow() {
             println!("{:7} {}", *v, *k);
         }
     }

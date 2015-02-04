@@ -729,7 +729,7 @@ impl<'a> FromIterator<&'a str> for String {
 #[unstable(feature = "collections",
            reason = "waiting on Extend stabilization")]
 impl Extend<char> for String {
-    fn extend<I:Iterator<Item=char>>(&mut self, mut iterator: I) {
+    fn extend<I:Iterator<Item=char>>(&mut self, iterator: I) {
         let (lower_bound, _) = iterator.size_hint();
         self.reserve(lower_bound);
         for ch in iterator {
@@ -741,7 +741,7 @@ impl Extend<char> for String {
 #[unstable(feature = "collections",
            reason = "waiting on Extend stabilization")]
 impl<'a> Extend<&'a str> for String {
-    fn extend<I: Iterator<Item=&'a str>>(&mut self, mut iterator: I) {
+    fn extend<I: Iterator<Item=&'a str>>(&mut self, iterator: I) {
         // A guess that at least one byte per iterator element will be needed.
         let (lower_bound, _) = iterator.size_hint();
         self.reserve(lower_bound);
@@ -877,16 +877,6 @@ impl ops::Index<ops::RangeFrom<uint>> for String {
         &self[][*index]
     }
 }
-#[cfg(stage0)]
-#[stable(feature = "rust1", since = "1.0.0")]
-impl ops::Index<ops::FullRange> for String {
-    type Output = str;
-    #[inline]
-    fn index(&self, _index: &ops::FullRange) -> &str {
-        unsafe { mem::transmute(self.vec.as_slice()) }
-    }
-}
-#[cfg(not(stage0))]
 #[stable(feature = "rust1", since = "1.0.0")]
 impl ops::Index<ops::RangeFull> for String {
     type Output = str;
@@ -940,19 +930,24 @@ pub fn as_string<'a>(x: &'a str) -> DerefString<'a> {
     DerefString { x: as_vec(x.as_bytes()) }
 }
 
+#[unstable(feature = "collections", reason = "associated error type may change")]
 impl FromStr for String {
+    type Err = ();
     #[inline]
-    fn from_str(s: &str) -> Option<String> {
-        Some(String::from_str(s))
+    fn from_str(s: &str) -> Result<String, ()> {
+        Ok(String::from_str(s))
     }
 }
 
 /// A generic trait for converting a value to a string
+#[stable(feature = "rust1", since = "1.0.0")]
 pub trait ToString {
     /// Converts the value of `self` to an owned string
+    #[stable(feature = "rust1", since = "1.0.0")]
     fn to_string(&self) -> String;
 }
 
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<T: fmt::Display + ?Sized> ToString for T {
     #[inline]
     fn to_string(&self) -> String {
@@ -989,6 +984,7 @@ impl<'a> Str for CowString<'a> {
     }
 }
 
+#[stable(feature = "rust1", since = "1.0.0")]
 impl fmt::Writer for String {
     #[inline]
     fn write_str(&mut self, s: &str) -> fmt::Result {
@@ -1005,8 +1001,6 @@ mod tests {
     use str::Utf8Error;
     use core::iter::repeat;
     use super::{as_string, CowString};
-    #[cfg(stage0)]
-    use core::ops::FullRange;
 
     #[test]
     fn test_as_string() {
@@ -1016,7 +1010,7 @@ mod tests {
 
     #[test]
     fn test_from_str() {
-      let owned: Option<::std::string::String> = "string".parse();
+      let owned: Option<::std::string::String> = "string".parse().ok();
       assert_eq!(owned.as_ref().map(|s| s.as_slice()), Some("string"));
     }
 
@@ -1124,7 +1118,7 @@ mod tests {
              (String::from_str("\u{20000}"),
               vec![0xD840, 0xDC00])];
 
-        for p in pairs.iter() {
+        for p in &pairs {
             let (s, u) = (*p).clone();
             let s_as_utf16 = s.utf16_units().collect::<Vec<u16>>();
             let u_as_string = String::from_utf16(u.as_slice()).unwrap();
@@ -1302,8 +1296,8 @@ mod tests {
 
     #[test]
     fn test_simple_types() {
-        assert_eq!(1i.to_string(), "1");
-        assert_eq!((-1i).to_string(), "-1");
+        assert_eq!(1.to_string(), "1");
+        assert_eq!((-1).to_string(), "-1");
         assert_eq!(200u.to_string(), "200");
         assert_eq!(2u8.to_string(), "2");
         assert_eq!(true.to_string(), "true");
@@ -1315,9 +1309,9 @@ mod tests {
     fn test_vectors() {
         let x: Vec<int> = vec![];
         assert_eq!(format!("{:?}", x), "[]");
-        assert_eq!(format!("{:?}", vec![1i]), "[1]");
-        assert_eq!(format!("{:?}", vec![1i, 2, 3]), "[1, 2, 3]");
-        assert!(format!("{:?}", vec![vec![], vec![1i], vec![1i, 1]]) ==
+        assert_eq!(format!("{:?}", vec![1]), "[1]");
+        assert_eq!(format!("{:?}", vec![1, 2, 3]), "[1, 2, 3]");
+        assert!(format!("{:?}", vec![vec![], vec![1], vec![1, 1]]) ==
                "[[], [1], [1, 1]]");
     }
 

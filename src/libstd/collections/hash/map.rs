@@ -20,7 +20,7 @@ use cmp::{max, Eq, PartialEq};
 use default::Default;
 use fmt::{self, Debug};
 use hash::{self, Hash, SipHasher};
-use iter::{self, Iterator, ExactSizeIterator, IteratorExt, FromIterator, Extend, Map};
+use iter::{self, Iterator, ExactSizeIterator, IntoIterator, IteratorExt, FromIterator, Extend, Map};
 use marker::Sized;
 use mem::{self, replace};
 use num::{Int, UnsignedInt};
@@ -46,6 +46,7 @@ use super::table::BucketState::{
 use super::state::HashState;
 
 const INITIAL_LOG2_CAP: uint = 5;
+#[unstable(feature = "std_misc")]
 pub const INITIAL_CAPACITY: uint = 1 << INITIAL_LOG2_CAP; // 2^5
 
 /// The default behavior of HashMap implements a load factor of 90.9%.
@@ -536,7 +537,7 @@ impl<K, V, S, H> HashMap<K, V, S>
     ///
     /// let s = RandomState::new();
     /// let mut map = HashMap::with_hash_state(s);
-    /// map.insert(1i, 2u);
+    /// map.insert(1, 2u);
     /// ```
     #[inline]
     #[unstable(feature = "std_misc", reason = "hasher stuff is unclear")]
@@ -564,7 +565,7 @@ impl<K, V, S, H> HashMap<K, V, S>
     ///
     /// let s = RandomState::new();
     /// let mut map = HashMap::with_capacity_and_hash_state(10, s);
-    /// map.insert(1i, 2u);
+    /// map.insert(1, 2u);
     /// ```
     #[inline]
     #[unstable(feature = "std_misc", reason = "hasher stuff is unclear")]
@@ -809,7 +810,7 @@ impl<K, V, S, H> HashMap<K, V, S>
     /// use std::collections::HashMap;
     ///
     /// let mut map = HashMap::new();
-    /// map.insert("a", 1i);
+    /// map.insert("a", 1);
     /// map.insert("b", 2);
     /// map.insert("c", 3);
     ///
@@ -834,7 +835,7 @@ impl<K, V, S, H> HashMap<K, V, S>
     /// use std::collections::HashMap;
     ///
     /// let mut map = HashMap::new();
-    /// map.insert("a", 1i);
+    /// map.insert("a", 1);
     /// map.insert("b", 2);
     /// map.insert("c", 3);
     ///
@@ -859,7 +860,7 @@ impl<K, V, S, H> HashMap<K, V, S>
     /// use std::collections::HashMap;
     ///
     /// let mut map = HashMap::new();
-    /// map.insert("a", 1i);
+    /// map.insert("a", 1);
     /// map.insert("b", 2);
     /// map.insert("c", 3);
     ///
@@ -882,7 +883,7 @@ impl<K, V, S, H> HashMap<K, V, S>
     /// use std::collections::HashMap;
     ///
     /// let mut map = HashMap::new();
-    /// map.insert("a", 1i);
+    /// map.insert("a", 1);
     /// map.insert("b", 2);
     /// map.insert("c", 3);
     ///
@@ -910,7 +911,7 @@ impl<K, V, S, H> HashMap<K, V, S>
     /// use std::collections::HashMap;
     ///
     /// let mut map = HashMap::new();
-    /// map.insert("a", 1i);
+    /// map.insert("a", 1);
     /// map.insert("b", 2);
     /// map.insert("c", 3);
     ///
@@ -1300,18 +1301,13 @@ pub struct IterMut<'a, K: 'a, V: 'a> {
 /// HashMap move iterator.
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct IntoIter<K, V> {
-    inner: iter::Map<
-        (SafeHash, K, V),
-        (K, V),
-        table::IntoIter<K, V>,
-        fn((SafeHash, K, V)) -> (K, V),
-    >
+    inner: iter::Map<table::IntoIter<K, V>, fn((SafeHash, K, V)) -> (K, V)>
 }
 
 /// HashMap keys iterator.
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct Keys<'a, K: 'a, V: 'a> {
-    inner: Map<(&'a K, &'a V), &'a K, Iter<'a, K, V>, fn((&'a K, &'a V)) -> &'a K>
+    inner: Map<Iter<'a, K, V>, fn((&'a K, &'a V)) -> &'a K>
 }
 
 // FIXME(#19839) Remove in favor of `#[derive(Clone)]`
@@ -1326,7 +1322,7 @@ impl<'a, K, V> Clone for Keys<'a, K, V> {
 /// HashMap values iterator.
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct Values<'a, K: 'a, V: 'a> {
-    inner: Map<(&'a K, &'a V), &'a V, Iter<'a, K, V>, fn((&'a K, &'a V)) -> &'a V>
+    inner: Map<Iter<'a, K, V>, fn((&'a K, &'a V)) -> &'a V>
 }
 
 // FIXME(#19839) Remove in favor of `#[derive(Clone)]`
@@ -1342,12 +1338,7 @@ impl<'a, K, V> Clone for Values<'a, K, V> {
 #[unstable(feature = "std_misc",
            reason = "matches collection reform specification, waiting for dust to settle")]
 pub struct Drain<'a, K: 'a, V: 'a> {
-    inner: iter::Map<
-        (SafeHash, K, V),
-        (K, V),
-        table::Drain<'a, K, V>,
-        fn((SafeHash, K, V)) -> (K, V),
-    >
+    inner: iter::Map<table::Drain<'a, K, V>, fn((SafeHash, K, V)) -> (K, V)>
 }
 
 /// A view into a single occupied location in a HashMap.
@@ -1383,6 +1374,42 @@ enum VacantEntryState<K, V, M> {
     NeqElem(FullBucket<K, V, M>, uint),
     /// The index is genuinely vacant.
     NoElem(EmptyBucket<K, V, M>),
+}
+
+impl<'a, K, V, S, H> IntoIterator for &'a HashMap<K, V, S>
+    where K: Eq + Hash<H>,
+          S: HashState<Hasher=H>,
+          H: hash::Hasher<Output=u64>
+{
+    type Iter = Iter<'a, K, V>;
+
+    fn into_iter(self) -> Iter<'a, K, V> {
+        self.iter()
+    }
+}
+
+impl<'a, K, V, S, H> IntoIterator for &'a mut HashMap<K, V, S>
+    where K: Eq + Hash<H>,
+          S: HashState<Hasher=H>,
+          H: hash::Hasher<Output=u64>
+{
+    type Iter = IterMut<'a, K, V>;
+
+    fn into_iter(mut self) -> IterMut<'a, K, V> {
+        self.iter_mut()
+    }
+}
+
+impl<K, V, S, H> IntoIterator for HashMap<K, V, S>
+    where K: Eq + Hash<H>,
+          S: HashState<Hasher=H>,
+          H: hash::Hasher<Output=u64>
+{
+    type Iter = IntoIter<K, V>;
+
+    fn into_iter(self) -> IntoIter<K, V> {
+        self.into_iter()
+    }
 }
 
 #[stable(feature = "rust1", since = "1.0.0")]
@@ -1539,7 +1566,7 @@ impl<K, V, S, H> Extend<(K, V)> for HashMap<K, V, S>
           S: HashState<Hasher=H>,
           H: hash::Hasher<Output=u64>
 {
-    fn extend<T: Iterator<Item=(K, V)>>(&mut self, mut iter: T) {
+    fn extend<T: Iterator<Item=(K, V)>>(&mut self, iter: T) {
         for (k, v) in iter {
             self.insert(k, v);
         }
@@ -1596,6 +1623,8 @@ impl Default for RandomState {
 /// typically declare an ability to explicitly hash into this particular type,
 /// but rather in a `H: hash::Writer` type parameter.
 #[allow(missing_copy_implementations)]
+#[unstable(feature = "std_misc",
+           reason = "hashing an hash maps may be altered")]
 pub struct Hasher { inner: SipHasher }
 
 impl hash::Writer for Hasher {
@@ -1622,7 +1651,7 @@ mod test_map {
     fn test_create_capacity_zero() {
         let mut m = HashMap::with_capacity(0);
 
-        assert!(m.insert(1i, 1i).is_none());
+        assert!(m.insert(1, 1).is_none());
 
         assert!(m.contains_key(&1));
         assert!(!m.contains_key(&0));
@@ -1632,9 +1661,9 @@ mod test_map {
     fn test_insert() {
         let mut m = HashMap::new();
         assert_eq!(m.len(), 0);
-        assert!(m.insert(1i, 2i).is_none());
+        assert!(m.insert(1, 2).is_none());
         assert_eq!(m.len(), 1);
-        assert!(m.insert(2i, 4i).is_none());
+        assert!(m.insert(2, 4).is_none());
         assert_eq!(m.len(), 2);
         assert_eq!(*m.get(&1).unwrap(), 2);
         assert_eq!(*m.get(&2).unwrap(), 4);
@@ -1674,7 +1703,7 @@ mod test_map {
     #[test]
     fn test_drops() {
         DROP_VECTOR.with(|slot| {
-            *slot.borrow_mut() = repeat(0i).take(200).collect();
+            *slot.borrow_mut() = repeat(0).take(200).collect();
         });
 
         {
@@ -1772,7 +1801,7 @@ mod test_map {
                 }
             });
 
-            for _ in half {}
+            for _ in half.by_ref() {}
 
             DROP_VECTOR.with(|v| {
                 let nk = (0u..100).filter(|&i| {
@@ -1807,10 +1836,10 @@ mod test_map {
 
         // Try this a few times to make sure we never screw up the hashmap's
         // internal state.
-        for _ in 0i..10 {
+        for _ in 0..10 {
             assert!(m.is_empty());
 
-            for i in range_inclusive(1i, 1000) {
+            for i in range_inclusive(1, 1000) {
                 assert!(m.insert(i, i).is_none());
 
                 for j in range_inclusive(1, i) {
@@ -1824,12 +1853,12 @@ mod test_map {
                 }
             }
 
-            for i in range_inclusive(1001i, 2000) {
+            for i in range_inclusive(1001, 2000) {
                 assert!(!m.contains_key(&i));
             }
 
             // remove forwards
-            for i in range_inclusive(1i, 1000) {
+            for i in range_inclusive(1, 1000) {
                 assert!(m.remove(&i).is_some());
 
                 for j in range_inclusive(1, i) {
@@ -1841,16 +1870,16 @@ mod test_map {
                 }
             }
 
-            for i in range_inclusive(1i, 1000) {
+            for i in range_inclusive(1, 1000) {
                 assert!(!m.contains_key(&i));
             }
 
-            for i in range_inclusive(1i, 1000) {
+            for i in range_inclusive(1, 1000) {
                 assert!(m.insert(i, i).is_none());
             }
 
             // remove backwards
-            for i in range_step_inclusive(1000i, 1, -1) {
+            for i in range_step_inclusive(1000, 1, -1) {
                 assert!(m.remove(&i).is_some());
 
                 for j in range_inclusive(i, 1000) {
@@ -1867,9 +1896,9 @@ mod test_map {
     #[test]
     fn test_find_mut() {
         let mut m = HashMap::new();
-        assert!(m.insert(1i, 12i).is_none());
-        assert!(m.insert(2i, 8i).is_none());
-        assert!(m.insert(5i, 14i).is_none());
+        assert!(m.insert(1, 12).is_none());
+        assert!(m.insert(2, 8).is_none());
+        assert!(m.insert(5, 14).is_none());
         let new = 100;
         match m.get_mut(&5) {
             None => panic!(), Some(x) => *x = new
@@ -1880,18 +1909,18 @@ mod test_map {
     #[test]
     fn test_insert_overwrite() {
         let mut m = HashMap::new();
-        assert!(m.insert(1i, 2i).is_none());
+        assert!(m.insert(1, 2).is_none());
         assert_eq!(*m.get(&1).unwrap(), 2);
-        assert!(!m.insert(1i, 3i).is_none());
+        assert!(!m.insert(1, 3).is_none());
         assert_eq!(*m.get(&1).unwrap(), 3);
     }
 
     #[test]
     fn test_insert_conflicts() {
         let mut m = HashMap::with_capacity(4);
-        assert!(m.insert(1i, 2i).is_none());
-        assert!(m.insert(5i, 3i).is_none());
-        assert!(m.insert(9i, 4i).is_none());
+        assert!(m.insert(1, 2).is_none());
+        assert!(m.insert(5, 3).is_none());
+        assert!(m.insert(9, 4).is_none());
         assert_eq!(*m.get(&9).unwrap(), 4);
         assert_eq!(*m.get(&5).unwrap(), 3);
         assert_eq!(*m.get(&1).unwrap(), 2);
@@ -1900,7 +1929,7 @@ mod test_map {
     #[test]
     fn test_conflict_remove() {
         let mut m = HashMap::with_capacity(4);
-        assert!(m.insert(1i, 2i).is_none());
+        assert!(m.insert(1, 2).is_none());
         assert_eq!(*m.get(&1).unwrap(), 2);
         assert!(m.insert(5, 3).is_none());
         assert_eq!(*m.get(&1).unwrap(), 2);
@@ -1917,7 +1946,7 @@ mod test_map {
     #[test]
     fn test_is_empty() {
         let mut m = HashMap::with_capacity(4);
-        assert!(m.insert(1i, 2i).is_none());
+        assert!(m.insert(1, 2).is_none());
         assert!(!m.is_empty());
         assert!(m.remove(&1).is_some());
         assert!(m.is_empty());
@@ -1926,7 +1955,7 @@ mod test_map {
     #[test]
     fn test_pop() {
         let mut m = HashMap::new();
-        m.insert(1i, 2i);
+        m.insert(1, 2);
         assert_eq!(m.remove(&1), Some(2));
         assert_eq!(m.remove(&1), None);
     }
@@ -1941,7 +1970,7 @@ mod test_map {
 
         let mut observed: u32 = 0;
 
-        for (k, v) in m.iter() {
+        for (k, v) in &m {
             assert_eq!(*v, *k * 2);
             observed |= 1 << *k;
         }
@@ -1950,7 +1979,7 @@ mod test_map {
 
     #[test]
     fn test_keys() {
-        let vec = vec![(1i, 'a'), (2i, 'b'), (3i, 'c')];
+        let vec = vec![(1, 'a'), (2, 'b'), (3, 'c')];
         let map = vec.into_iter().collect::<HashMap<int, char>>();
         let keys = map.keys().map(|&k| k).collect::<Vec<int>>();
         assert_eq!(keys.len(), 3);
@@ -1961,7 +1990,7 @@ mod test_map {
 
     #[test]
     fn test_values() {
-        let vec = vec![(1i, 'a'), (2i, 'b'), (3i, 'c')];
+        let vec = vec![(1, 'a'), (2, 'b'), (3, 'c')];
         let map = vec.into_iter().collect::<HashMap<int, char>>();
         let values = map.values().map(|&v| v).collect::<Vec<char>>();
         assert_eq!(values.len(), 3);
@@ -1973,8 +2002,8 @@ mod test_map {
     #[test]
     fn test_find() {
         let mut m = HashMap::new();
-        assert!(m.get(&1i).is_none());
-        m.insert(1i, 2i);
+        assert!(m.get(&1).is_none());
+        m.insert(1, 2);
         match m.get(&1) {
             None => panic!(),
             Some(v) => assert_eq!(*v, 2)
@@ -1984,17 +2013,17 @@ mod test_map {
     #[test]
     fn test_eq() {
         let mut m1 = HashMap::new();
-        m1.insert(1i, 2i);
-        m1.insert(2i, 3i);
-        m1.insert(3i, 4i);
+        m1.insert(1, 2);
+        m1.insert(2, 3);
+        m1.insert(3, 4);
 
         let mut m2 = HashMap::new();
-        m2.insert(1i, 2i);
-        m2.insert(2i, 3i);
+        m2.insert(1, 2);
+        m2.insert(2, 3);
 
         assert!(m1 != m2);
 
-        m2.insert(3i, 4i);
+        m2.insert(3, 4);
 
         assert_eq!(m1, m2);
     }
@@ -2004,8 +2033,8 @@ mod test_map {
         let mut map: HashMap<int, int> = HashMap::new();
         let empty: HashMap<int, int> = HashMap::new();
 
-        map.insert(1i, 2i);
-        map.insert(3i, 4i);
+        map.insert(1, 2);
+        map.insert(3, 4);
 
         let map_str = format!("{:?}", map);
 
@@ -2127,18 +2156,18 @@ mod test_map {
 
     #[test]
     fn test_from_iter() {
-        let xs = [(1i, 1i), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)];
+        let xs = [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)];
 
         let map: HashMap<int, int> = xs.iter().map(|&x| x).collect();
 
-        for &(k, v) in xs.iter() {
+        for &(k, v) in &xs {
             assert_eq!(map.get(&k), Some(&v));
         }
     }
 
     #[test]
     fn test_size_hint() {
-        let xs = [(1i, 1i), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)];
+        let xs = [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)];
 
         let map: HashMap<int, int> = xs.iter().map(|&x| x).collect();
 
@@ -2151,7 +2180,7 @@ mod test_map {
 
     #[test]
     fn test_iter_len() {
-        let xs = [(1i, 1i), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)];
+        let xs = [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)];
 
         let map: HashMap<int, int> = xs.iter().map(|&x| x).collect();
 
@@ -2164,7 +2193,7 @@ mod test_map {
 
     #[test]
     fn test_mut_size_hint() {
-        let xs = [(1i, 1i), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)];
+        let xs = [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)];
 
         let mut map: HashMap<int, int> = xs.iter().map(|&x| x).collect();
 
@@ -2177,7 +2206,7 @@ mod test_map {
 
     #[test]
     fn test_iter_mut_len() {
-        let xs = [(1i, 1i), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)];
+        let xs = [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)];
 
         let mut map: HashMap<int, int> = xs.iter().map(|&x| x).collect();
 
@@ -2213,7 +2242,7 @@ mod test_map {
 
     #[test]
     fn test_entry(){
-        let xs = [(1i, 10i), (2, 20), (3, 30), (4, 40), (5, 50), (6, 60)];
+        let xs = [(1, 10), (2, 20), (3, 30), (4, 40), (5, 50), (6, 60)];
 
         let mut map: HashMap<int, int> = xs.iter().map(|&x| x).collect();
 

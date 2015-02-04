@@ -1,4 +1,4 @@
-// Copyright 2014 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2014-2015 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -71,21 +71,11 @@ impl Process {
             }
         }
 
-        #[cfg(target_os = "macos")]
-        unsafe fn set_environ(envp: *const c_void) {
-            extern { fn _NSGetEnviron() -> *mut *const c_void; }
-
-            *_NSGetEnviron() = envp;
-        }
-        #[cfg(not(target_os = "macos"))]
-        unsafe fn set_environ(envp: *const c_void) {
-            extern { static mut environ: *const c_void; }
-            environ = envp;
-        }
         #[cfg(all(target_os = "android", target_arch = "aarch64"))]
         unsafe fn getdtablesize() -> c_int {
             libc::sysconf(libc::consts::os::sysconf::_SC_OPEN_MAX) as c_int
         }
+
         #[cfg(not(all(target_os = "android", target_arch = "aarch64")))]
         unsafe fn getdtablesize() -> c_int {
             libc::funcs::bsd44::getdtablesize()
@@ -276,7 +266,7 @@ impl Process {
                     fail(&mut output);
                 }
                 if !envp.is_null() {
-                    set_environ(envp);
+                    *sys::os::environ() = envp as *const _;
                 }
                 let _ = execvp(*argv, argv as *mut _);
                 fail(&mut output);
@@ -516,7 +506,7 @@ impl Process {
         // which will wake up the other end at some point, so we just allow this
         // signal to be coalesced with the pending signals on the pipe.
         extern fn sigchld_handler(_signum: libc::c_int) {
-            let msg = 1i;
+            let msg = 1;
             match unsafe {
                 libc::write(WRITE_FD, &msg as *const _ as *const libc::c_void, 1)
             } {
@@ -577,7 +567,7 @@ fn with_envp<K,V,T,F>(env: Option<&HashMap<K, V>>,
         Some(env) => {
             let mut tmps = Vec::with_capacity(env.len());
 
-            for pair in env.iter() {
+            for pair in env {
                 let mut kv = Vec::new();
                 kv.push_all(pair.0.container_as_bytes());
                 kv.push('=' as u8);
@@ -611,7 +601,8 @@ fn translate_status(status: c_int) -> ProcessExit {
     #[cfg(any(target_os = "macos",
               target_os = "ios",
               target_os = "freebsd",
-              target_os = "dragonfly"))]
+              target_os = "dragonfly",
+              target_os = "openbsd"))]
     mod imp {
         pub fn WIFEXITED(status: i32) -> bool { (status & 0x7f) == 0 }
         pub fn WEXITSTATUS(status: i32) -> i32 { status >> 8 }

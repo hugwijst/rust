@@ -61,13 +61,9 @@ use core::clone::Clone;
 use core::iter::AdditiveIterator;
 use core::iter::{Iterator, IteratorExt};
 use core::ops::Index;
-#[cfg(stage0)]
-use core::ops::FullRange as RangeFull;
-#[cfg(stage0)]
-use core::ops::FullRange;
-#[cfg(not(stage0))]
 use core::ops::RangeFull;
 use core::option::Option::{self, Some, None};
+use core::result::Result;
 use core::slice::AsSlice;
 use core::str as core_str;
 use unicode::str::{UnicodeStr, Utf16Encoder};
@@ -103,7 +99,7 @@ impl<S: Str> SliceConcatExt<str, String> for [S] {
         let len = s.iter().map(|s| s.as_slice().len()).sum();
         let mut result = String::with_capacity(len);
 
-        for s in s.iter() {
+        for s in s {
             result.push_str(s.as_slice())
         }
 
@@ -129,7 +125,7 @@ impl<S: Str> SliceConcatExt<str, String> for [S] {
         let mut result = String::with_capacity(len);
         let mut first = true;
 
-        for s in s.iter() {
+        for s in s {
             if first {
                 first = false;
             } else {
@@ -199,7 +195,7 @@ impl<'a> Iterator for Decompositions<'a> {
         }
 
         if !self.sorted {
-            for ch in self.iter {
+            for ch in self.iter.by_ref() {
                 let buffer = &mut self.buffer;
                 let sorted = &mut self.sorted;
                 {
@@ -279,7 +275,7 @@ impl<'a> Iterator for Recompositions<'a> {
         loop {
             match self.state {
                 Composing => {
-                    for ch in self.iter {
+                    for ch in self.iter.by_ref() {
                         let ch_class = unicode::char::canonical_combining_class(ch);
                         if self.composee.is_none() {
                             if ch_class != 0 {
@@ -443,12 +439,9 @@ pub trait StrExt: Index<RangeFull, Output = str> {
     /// # Examples
     ///
     /// ```rust
-    /// let s = "Do you know the muffin man,
-    /// The muffin man, the muffin man, ...".to_string();
+    /// let s = "this is old";
     ///
-    /// assert_eq!(s.replace("muffin man", "little lamb"),
-    ///            "Do you know the little lamb,
-    /// The little lamb, the little lamb, ...".to_string());
+    /// assert_eq!(s.replace("old", "new"), "this is new");
     ///
     /// // not found, so no change.
     /// assert_eq!(s.replace("cookie monster", "little lamb"), s);
@@ -1231,13 +1224,12 @@ pub trait StrExt: Index<RangeFull, Output = str> {
     /// # Example
     ///
     /// ```
-    /// assert_eq!("4".parse::<u32>(), Some(4));
-    /// assert_eq!("j".parse::<u32>(), None);
+    /// assert_eq!("4".parse::<u32>(), Ok(4));
+    /// assert!("j".parse::<u32>().is_err());
     /// ```
     #[inline]
-    #[unstable(feature = "collections",
-               reason = "this method was just created")]
-    fn parse<F: FromStr>(&self) -> Option<F> {
+    #[stable(feature = "rust1", since = "1.0.0")]
+    fn parse<F: FromStr>(&self) -> Result<F, F::Err> {
         core_str::StrExt::parse(&self[])
     }
 
@@ -2013,7 +2005,7 @@ mod tests {
         let s = "ศไทย中华Việt Nam";
         let v = vec!['ศ','ไ','ท','ย','中','华','V','i','ệ','t',' ','N','a','m'];
         let mut pos = 0;
-        for ch in v.iter() {
+        for ch in &v {
             assert!(s.char_at(pos) == *ch);
             pos += ch.to_string().len();
         }
@@ -2154,7 +2146,7 @@ mod tests {
         let s = "ศไทย中华Việt Nam";
         let mut it = s.chars();
         it.next();
-        assert!(it.zip(it.clone()).all(|(x,y)| x == y));
+        assert!(it.clone().zip(it).all(|(x,y)| x == y));
     }
 
     #[test]
@@ -2711,7 +2703,7 @@ mod tests {
             &["\u{378}\u{308}\u{903}"], &["\u{378}\u{308}", "\u{903}"]),
         ];
 
-        for &(s, g) in test_same.iter() {
+        for &(s, g) in &test_same[] {
             // test forward iterator
             assert!(order::equals(s.graphemes(true), g.iter().map(|&x| x)));
             assert!(order::equals(s.graphemes(false), g.iter().map(|&x| x)));
@@ -2721,7 +2713,7 @@ mod tests {
             assert!(order::equals(s.graphemes(false).rev(), g.iter().rev().map(|&x| x)));
         }
 
-        for &(s, gt, gf) in test_diff.iter() {
+        for &(s, gt, gf) in &test_diff {
             // test forward iterator
             assert!(order::equals(s.graphemes(true), gt.iter().map(|&x| x)));
             assert!(order::equals(s.graphemes(false), gf.iter().map(|&x| x)));

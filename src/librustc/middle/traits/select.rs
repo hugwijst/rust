@@ -295,7 +295,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
 
     fn evaluate_predicates_recursively<'a,'o,I>(&mut self,
                                                 stack: Option<&TraitObligationStack<'o, 'tcx>>,
-                                                mut predicates: I)
+                                                predicates: I)
                                                 -> EvaluationResult<'tcx>
         where I : Iterator<Item=&'a PredicateObligation<'tcx>>, 'tcx:'a
     {
@@ -1024,12 +1024,17 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                kind,
                obligation.repr(self.tcx()));
 
-        let closure_kind = self.closure_typer.closure_kind(closure_def_id);
-
-        debug!("closure_kind = {:?}", closure_kind);
-
-        if closure_kind == kind {
-            candidates.vec.push(ClosureCandidate(closure_def_id, substs.clone()));
+        match self.closure_typer.closure_kind(closure_def_id) {
+            Some(closure_kind) => {
+                debug!("assemble_unboxed_candidates: closure_kind = {:?}", closure_kind);
+                if closure_kind == kind {
+                    candidates.vec.push(ClosureCandidate(closure_def_id, substs.clone()));
+                }
+            }
+            None => {
+                debug!("assemble_unboxed_candidates: closure_kind not yet known");
+                candidates.ambiguous = true;
+            }
         }
 
         Ok(())
@@ -1084,7 +1089,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         debug!("assemble_candidates_from_impls(self_ty={})", self_ty.repr(self.tcx()));
 
         let all_impls = self.all_impls(obligation.predicate.def_id());
-        for &impl_def_id in all_impls.iter() {
+        for &impl_def_id in &all_impls {
             self.infcx.probe(|snapshot| {
                 let (skol_obligation_trait_pred, skol_map) =
                     self.infcx().skolemize_late_bound_regions(&obligation.predicate, snapshot);

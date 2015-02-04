@@ -22,7 +22,7 @@
        html_favicon_url = "http://www.rust-lang.org/favicon.ico",
        html_root_url = "http://doc.rust-lang.org/nightly/",
        html_playground_url = "http://play.rust-lang.org/")]
-#![allow(unknown_features)] #![feature(int_uint)]
+#![feature(int_uint)]
 #![no_std]
 #![unstable(feature = "rand")]
 #![feature(staged_api)]
@@ -152,9 +152,9 @@ pub trait Rng : Sized {
         // (3) adds more `unsafe` that needs to be checked, (4)
         // probably doesn't give much performance gain if
         // optimisations are on.
-        let mut count = 0i;
+        let mut count = 0;
         let mut num = 0;
-        for byte in dest.iter_mut() {
+        for byte in dest {
             if count == 0 {
                 // we could micro-optimise here by generating a u32 if
                 // we only need a few more bytes to fill the vector
@@ -222,7 +222,7 @@ pub trait Rng : Sized {
     /// use std::rand::{thread_rng, Rng};
     ///
     /// let mut rng = thread_rng();
-    /// let n: uint = rng.gen_range(0u, 10);
+    /// let n: uint = rng.gen_range(0, 10);
     /// println!("{}", n);
     /// let m: f64 = rng.gen_range(-40.0f64, 1.3e5f64);
     /// println!("{}", m);
@@ -269,7 +269,7 @@ pub trait Rng : Sized {
     /// ```
     /// use std::rand::{thread_rng, Rng};
     ///
-    /// let choices = [1i, 2, 4, 8, 16, 32];
+    /// let choices = [1, 2, 4, 8, 16, 32];
     /// let mut rng = thread_rng();
     /// println!("{:?}", rng.choose(&choices));
     /// assert_eq!(rng.choose(&choices[..0]), None);
@@ -278,7 +278,7 @@ pub trait Rng : Sized {
         if values.is_empty() {
             None
         } else {
-            Some(&values[self.gen_range(0u, values.len())])
+            Some(&values[self.gen_range(0, values.len())])
         }
     }
 
@@ -290,7 +290,7 @@ pub trait Rng : Sized {
     /// use std::rand::{thread_rng, Rng};
     ///
     /// let mut rng = thread_rng();
-    /// let mut y = [1i, 2, 3];
+    /// let mut y = [1, 2, 3];
     /// rng.shuffle(&mut y);
     /// println!("{:?}", y.as_slice());
     /// rng.shuffle(&mut y);
@@ -298,11 +298,11 @@ pub trait Rng : Sized {
     /// ```
     fn shuffle<T>(&mut self, values: &mut [T]) {
         let mut i = values.len();
-        while i >= 2u {
+        while i >= 2 {
             // invariant: elements with index >= i have been locked in place.
-            i -= 1u;
+            i -= 1;
             // lock element i in place.
-            values.swap(i, self.gen_range(0u, i + 1u));
+            values.swap(i, self.gen_range(0, i + 1));
         }
     }
 }
@@ -498,6 +498,8 @@ mod std {
     pub use core::{option, fmt}; // panic!()
     pub use core::clone; // derive Clone
     pub use core::marker;
+    // for-loops
+    pub use core::iter;
 }
 
 #[cfg(test)]
