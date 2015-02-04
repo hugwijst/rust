@@ -155,8 +155,10 @@ pub fn parse_config(args: Vec<String> ) -> Config {
         adb_path: opt_str2(matches.opt_str("adb-path")),
         adb_test_dir: opt_str2(matches.opt_str("adb-test-dir")),
         adb_device_status:
-            "arm-linux-androideabi" ==
-                opt_str2(matches.opt_str("target")).as_slice() &&
+            ("arm-linux-androideabi" ==
+                opt_str2(matches.opt_str("target")).as_slice() ||
+            "aarch64-linux-android" ==
+                opt_str2(matches.opt_str("target")).as_slice()) &&
             "(none)" !=
                 opt_str2(matches.opt_str("adb-test-dir")).as_slice() &&
             !opt_str2(matches.opt_str("adb-test-dir")).is_empty(),
@@ -213,17 +215,18 @@ pub fn opt_str2(maybestr: Option<String>) -> String {
 }
 
 pub fn run_tests(config: &Config) {
-    if config.target.as_slice() == "arm-linux-androideabi" {
+    if config.target.as_slice() == "arm-linux-androideabi" ||
+       config.target.as_slice() == "aarch64-linux-android" {
         match config.mode {
             DebugInfoGdb => {
-                println!("arm-linux-androideabi debug-info \
-                         test uses tcp 5039 port. please reserve it");
+                println!("{} debug-info test uses tcp 5039 port.\
+                         please reserve it", config.target);
             }
             _ =>{}
         }
 
-        //arm-linux-androideabi debug-info test uses remote debugger
-        //so, we test 1 task at once.
+        // android debug-info test uses remote debugger
+        // so, we test 1 task at once.
         // also trying to isolate problems with adb_run_wrapper.sh ilooping
         env::set_var("RUST_TEST_TASKS","1");
     }
